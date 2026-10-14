@@ -1,0 +1,526 @@
+<!-- FILE: ui_styles.html -->
+<!-- DESC: Global CSS for all UI components and layouts. -->
+<!-- AUTH: Andre Cavalcante -->
+<!-- DATE: July, 2026 -->
+<!-- LICENSE: GPL-v3 -->
+
+<style>
+:root {
+  --primary-color: #1a73e8;       /* Blue Google style */
+  --secondary-color: #5f6368;     /* Text secondary */
+  --error-color: #d93025;         /* Error Red */
+  --success-color: #1e8e3e;       /* Success Green */
+  --bg-color: #f8f9fa;            /* Background Light Gray */
+  --surface-color: #ffffff;       /* Card / Surface White */
+  --text-color: #202124;          /* Primary Text Black/Gray */
+  --border-color: #dadce0;        /* Border Color */
+}
+
+.container {
+  width: 100%;
+  max-width: 450px;
+  padding: 20px;
+}
+
+/* Card Style for Login/Setup */
+.card {
+  background: var(--surface-color);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15);
+  padding: 32px;
+  /* Keeps the fixed 80px header from covering the top of a card that something
+     scrolled into view (the inline panels of the Advisor/Incharge). */
+  scroll-margin-top: 90px;
+}
+
+/* Input Styles */
+.input-group {
+  margin-bottom: 20px;
+}
+
+label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: var(--secondary-color);
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+input[type="date"],
+input[type="datetime-local"],
+select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 16px;
+  box-sizing: border-box; /* Crucial para o padding não quebrar largura */
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(26,115,232,0.2);
+}
+
+/* Button Styles */
+.btn {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #1557b0;
+}
+
+/* ── Busy state: every action button is blocked while a call is in flight ── */
+/* Applied to <html>, not <body>: below the content the body no longer covers
+   the viewport, and the cursor would go back to normal there. The universal
+   selector overrides the pointer/text cursors of buttons and inputs. */
+html.app-busy,
+html.app-busy * {
+  cursor: progress !important;
+}
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  vertical-align: -2px;
+  border: 2px solid currentColor;   /* readable on primary and secondary alike */
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: btn-spin 0.7s linear infinite;
+}
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error Page Specific */
+.error-container {
+  text-align: center;
+  max-width: 400px;
+}
+
+.error-icon {
+  font-size: 64px;
+  color: var(--error-color);
+}
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  padding-top: 80px; /* Offset for fixed header */
+}
+
+.flex-center {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 20px;
+}
+
+/* ── Metric cards (Incharge dashboard) ─────────────────── */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+@media (max-width: 800px) {
+  .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+}
+.metric-card {
+  background: var(--surface-color);
+  border-radius: 8px;
+  padding: 20px 16px;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  border-top: 4px solid var(--border-color);
+}
+.metric-card.mc-yellow  { border-top-color: #fbbc04; }
+.metric-card.mc-green   { border-top-color: #34a853; }
+.metric-card.mc-red     { border-top-color: #ea4335; }
+.metric-card.mc-blue    { border-top-color: var(--primary-color); }
+.metric-number {
+  display: block;
+  font-size: 38px;
+  font-weight: 700;
+  color: var(--primary-color);
+  line-height: 1;
+}
+.metric-label {
+  display: block;
+  font-size: 12px;
+  color: var(--secondary-color);
+  margin-top: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ── Status badges ──────────────────────────────────────── */
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-neutral    { background: #f1f3f4; color: #5f6368; }
+.badge-draft      { background: #e8f0fe; color: #1a73e8; }
+.badge-waiting    { background: #fff3e0; color: #e65100; }
+.badge-returned   { background: #fdecea; color: #c62828; }
+.badge-approved   { background: #e6f4ea; color: #137333; }
+.badge-homologated{ background: #e8f0fe; color: #1967d2; }
+.badge-finished   { background: #e6f4ea; color: #137333; }
+
+/* ── Data table ─────────────────────────────────────────── */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface-color);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.data-table thead { background-color: var(--primary-color); color: white; }
+.data-table th, .data-table td {
+  padding: 11px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 13px;
+}
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover { background: #f8f9fa; }
+
+/* ── Flow steps bar (icon progress, Student/Advisor detail views) ─────── */
+.flow-steps {
+  display: flex;
+  justify-content: space-between;
+  background: var(--surface-color);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+.flow-step {
+  flex: 1;
+  text-align: center;
+  position: relative;
+  color: var(--secondary-color);
+}
+.flow-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  left: 55%;
+  width: 90%;
+  height: 2px;
+  background: var(--border-color);
+  z-index: 0;
+}
+.flow-step .step-dot {
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  border-radius: 50%;
+  background: var(--border-color);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 auto 6px;
+  position: relative;
+  z-index: 1;
+}
+.flow-step .step-label { font-size: 12px; font-weight: 600; }
+.flow-step.step-done .step-dot   { background: var(--success-color); }
+.flow-step.step-done .step-label { color: var(--success-color); }
+.flow-step.step-current .step-dot   { background: var(--primary-color); }
+.flow-step.step-current .step-label { color: var(--primary-color); }
+.flow-step.step-locked { opacity: 0.5; }
+
+/* ── Messages bar (system feedback banner) ─────────────────────────────── */
+.messages-bar {
+  display: none;
+  background: var(--primary-color);
+  color: white;
+  padding: 10px 16px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-weight: bold;
+}
+.messages-bar.is-error { background: var(--error-color); }
+
+/* ── Actions bar (form action buttons) ─────────────────────────────────── */
+.actions-bar {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 16px 20px;
+  background: var(--surface-color);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  margin-top: 16px;
+}
+.actions-bar .btn { width: auto; padding: 10px 20px; }
+.btn-secondary { background: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); }
+.btn-secondary:hover { background: #eee; }
+
+/* Menu de ações (painel do Responsável): <details> abre e fecha sem script. */
+.action-menu { position: relative; }
+.action-menu > summary { list-style: none; width: auto; padding: 5px 12px; font-size: 12px; cursor: pointer; }
+.action-menu > summary::-webkit-details-marker { display: none; }
+.action-menu-list {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 230px;
+  background: #fff; border: 1px solid var(--border-color); border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12); padding: 4px 0;
+}
+.action-menu-list button {
+  display: block; width: 100%; text-align: left; background: none; border: 0;
+  padding: 8px 14px; font-size: 13px; color: var(--text-color); cursor: pointer;
+}
+.action-menu-list button:hover { background: var(--bg-color); }
+.action-menu-list button.is-danger { color: #c62828; }
+.action-menu-list hr { border: 0; border-top: 1px solid var(--border-color); margin: 4px 0; }
+
+/* ── Modal dialog (ui_comp_modal.html) ─────────────────────────────────── */
+/* Above the fixed page header, which sits at z-index 1000. */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(32,33,36,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-box {
+  background: var(--surface-color);
+  border-radius: 8px;
+  box-shadow: 0 11px 15px rgba(60,64,67,0.2), 0 24px 38px 3px rgba(60,64,67,0.14);
+  padding: 24px;
+  width: 100%;
+  max-width: 440px;
+}
+.modal-title {
+  margin: 0 0 12px;
+  font-size: 18px;
+  color: var(--primary-color);
+}
+.modal-message {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-line; /* keeps line breaks written into the message */
+}
+.modal-actions { box-shadow: none; padding: 0; margin-top: 24px; }
+
+/* ── Proposal form layout ──────────────────────────────────────────────── */
+.form-row { display: flex; gap: 20px; }
+.form-row .input-group { flex: 1; }
+textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: inherit;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+/* ── Doc link button ────────────────────────────────────────────────────── */
+/* Abrir um arquivo (Doc da proposta, PDF do trabalho) é conferir algo, não agir
+   sobre o TCC: era um botão de caixa cheia e passou a link, para não disputar
+   atenção com Submeter/Aprovar/Homologar. A margem à direita cobre o caso de
+   dois lado a lado (Doc + trabalho, nos painéis do Orientador e do Responsável)
+   sem precisar de um contêiner só para isso. */
+.file-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 16px;
+  color: var(--primary-color);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.file-link:hover { text-decoration: underline; }
+/* Só no formulário da proposta do Aluno: lá o Doc não é referência, é onde o
+   conteúdo do trabalho é escrito, e a frase substitui o destaque visual que o
+   botão dava. */
+.file-link-hint { font-size: 12px; color: var(--secondary-color); margin: 4px 0 0; }
+
+/* Orientador indicado pelo aluno que ainda não está cadastrado como professor
+   (tabela mestra do Responsável). Fica em bloco próprio, abaixo do nome, para
+   não empurrar a coluna quando o e-mail é longo. */
+.advisor-pending {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--error-color);
+}
+
+/* ── Activity log (ui_comp_event_log.html) ─────────────────────────────── */
+.event-log { margin-top: 20px; }
+.event-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 6px;
+}
+.event-log-head h4 { margin: 0; color: var(--primary-color); }
+.event-log-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: normal;
+  cursor: pointer;
+}
+.event-log-filter input { width: auto; }
+.event-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.event-entry {
+  border-left: 3px solid var(--primary-color);
+  padding: 6px 12px;
+  background: var(--bg-color);
+  border-radius: 0 4px 4px 0;
+}
+/* System entries are the majority; muted so the messages between people stand
+   out without needing the filter. */
+.event-system {
+  border-left-color: var(--border-color);
+  background: transparent;
+  opacity: 0.75;
+}
+.event-system .event-message { font-style: italic; }
+.event-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--secondary-color);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.event-to { text-transform: none; letter-spacing: 0; font-style: italic; }
+.event-message { font-size: 13px; white-space: pre-wrap; }
+.event-author-email { font-size: 11px; color: var(--secondary-color); margin-top: 2px; }
+.event-empty { font-size: 13px; color: var(--secondary-color); }
+/* Reads as a link, not as a form button: it reveals what is already there
+   instead of acting on the TCC, and must not compete with Submeter/Homologar. */
+.event-log-more {
+  width: auto;
+  margin-top: 8px;
+  padding: 4px 0;
+  border: none;
+  background: none;
+  color: var(--primary-color);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.event-log-more:hover { text-decoration: underline; }
+.event-log-compose { margin-top: 16px; }
+.event-log-compose textarea { margin-bottom: 8px; }
+
+/* ── Last-note indicator (Incharge master table) ────────────────────────── */
+.last-note-indicator {
+  cursor: help;
+  margin-left: 6px;
+  display: inline-block;
+  vertical-align: -3px;
+}
+.last-note-indicator svg {
+  width: 15px;
+  height: 15px;
+  fill: var(--secondary-color);
+}
+
+/* ── Committee (Banca) — read-only summary, shared by the 3 dashboards ──── */
+.committee-summary {
+  margin-top: 20px;
+  padding: 16px;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+.committee-summary h4 { margin: 0 0 8px; color: var(--primary-color); }
+.committee-meta { font-size: 13px; margin: 0 0 12px; }
+.committee-members {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.committee-member {
+  display: flex;
+  flex-direction: column;
+  border-left: 3px solid var(--primary-color);
+  padding: 4px 12px;
+}
+.member-name { font-size: 13px; font-weight: 600; }
+.member-meta { font-size: 11px; color: var(--secondary-color); }
+
+/* ── Committee (Banca) — member editor rows (Advisor form) ──────────────── */
+.member-editor {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.member-editor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.member-editor-title { font-size: 13px; font-weight: 600; color: var(--primary-color); }
+.member-editor .input-group { margin-bottom: 8px; }
+.member-editor label { font-size: 11px; }
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--error-color);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  width: auto;
+}
+</style>

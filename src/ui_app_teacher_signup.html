@@ -1,0 +1,121 @@
+<!-- FILE: ui_app_teacher_signup.html -->
+<!-- DESC: teacher completes their own registration from the invitation link -->
+<!-- AUTH: Andre Cavalcante -->
+<!-- DATE: August, 2026 -->
+<!-- LICENCE: GPL-v3 -->
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <?!= include('ui_styles') ?>
+  </head>
+  <body>
+    <div style="display:none;"><?!= include('ui_asset_logo1') ?></div>
+
+    <div class="flex-center">
+      <div class="container card">
+        <div style="text-align:center; margin-bottom:20px;">
+          <img id="logo1" height="120" />
+        </div>
+
+        <? if (done) { ?>
+
+          <h2>Cadastro concluído</h2>
+          <p style="color: var(--secondary-color); font-size:14px;">
+            Pronto. Você já faz parte do TCC-WebApp da FEEC/UFAM e pode ser
+            indicado como orientador ou membro de banca.
+          </p>
+          <div style="margin-top:24px; text-align:center;">
+            <button class="btn btn-primary"
+                    onclick="window.top.location.href = '<?= ScriptApp.getService().getUrl() ?>'">
+              Entrar no sistema
+            </button>
+          </div>
+
+        <? } else { ?>
+
+          <h2>Complete o seu cadastro</h2>
+          <p style="color: var(--secondary-color); font-size:14px;">
+            O professor responsável pela disciplina convidou
+            <strong><?= invitedEmail ?></strong> para o TCC-WebApp da FEEC/UFAM.
+            Estes dados saem na Ata da Defesa e na Folha de Aprovação, então
+            preencha como devem aparecer nos documentos.
+          </p>
+
+          <? if (message) { ?>
+            <div style="margin:16px 0; padding:12px; background:#fdecea; border:1px solid #f44336; border-radius:8px;">
+              <p style="margin:0; font-size:14px; color:#c62828;"><?= message ?></p>
+            </div>
+          <? } ?>
+
+          <!-- POST pelo mesmo roteador do login: os dados digitados não vão
+               para a barra de endereços nem para o histórico. O nonce fecha o
+               replay do F5, como em validate_login. -->
+          <form action="<?= ScriptApp.getService().getUrl() ?>" method="POST" target="_top">
+            <input type="hidden" name="page" value="validate_teacher_signup">
+            <input type="hidden" name="nonce" value="<?= loginNonce ?>">
+            <input type="hidden" name="token" value="<?= token ?>">
+
+            <div class="input-group">
+              <label>E-mail do convite</label>
+              <input type="email" value="<?= invitedEmail ?>" readonly
+                     style="background-color:#f1f3f4; color:#5f6368;">
+              <p style="font-size:12px; color:var(--secondary-color); margin:4px 0 0;">
+                <? if (isExternal) { ?>
+                  Você entra com este e-mail e a senha que recebeu por e-mail.
+                <? } else { ?>
+                  Você entra com esta conta Google, sem senha.
+                <? } ?>
+              </p>
+            </div>
+
+            <div class="input-group">
+              <label for="name">Nome completo</label>
+              <input type="text" id="name" name="name" required value="<?= displayName ?>"
+                     placeholder="Como deve aparecer na Ata e na Folha de Aprovação">
+            </div>
+
+            <div class="form-row">
+              <div class="input-group">
+                <label for="titulacao">Titulação</label>
+                <input type="text" id="titulacao" name="titulacao" placeholder="Dr., Dra., MSc.">
+              </div>
+              <div class="input-group">
+                <label for="instituicao">Instituição</label>
+                <input type="text" id="instituicao" name="instituicao"
+                       placeholder="<? if (isExternal) { ?>Sua universidade ou empresa<? } else { ?>UFAM<? } ?>">
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label for="phone">Telefone (opcional)</label>
+              <input type="text" id="phone" name="phone" placeholder="(92) 90000-0000">
+            </div>
+
+            <button type="submit" id="btnSignup" class="btn btn-primary" style="margin-top:20px;">
+              Concluir cadastro
+            </button>
+          </form>
+
+        <? } ?>
+      </div>
+    </div>
+
+    <?!= include('ui_scripts') ?>
+
+    <script>
+      document.getElementById('logo1').src = AppAssets['logo1'];
+
+      // Não usar btn.disabled: em alguns navegadores isso impede o próprio
+      // envio do formulário (mesma observação do ui_app_login).
+      const form = document.querySelector('form');
+      if (form) {
+        form.addEventListener('submit', function() {
+          const btn = document.getElementById('btnSignup');
+          if (btn) btn.innerText = 'Enviando…';
+          setBusyCursor(true);
+        });
+      }
+    </script>
+  </body>
+</html>

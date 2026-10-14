@@ -1,0 +1,619 @@
+<!-- FILE: ui_app_dashboard_student.html -->
+<!-- DESC: Main view for the Student (Aluno) — proposal sub-flow + TCC conclusion -->
+<!-- AUTH: Andre Cavalcante -->
+<!-- DATE: July, 2026 -->
+<!-- LICENSE: GPL-v3 -->
+<!DOCTYPE html>
+<html>
+  <head><?!= include('ui_styles') ?></head>
+  <body>
+    <!-- Hidden Assets -->
+    <div style="display:none;"><?!= include('ui_asset_logo4') ?></div>
+    <?!= include('ui_comp_page_header') ?>
+
+    <div class="main-content" style="max-width: 900px; margin: 0 auto; padding: 20px;">
+
+      <!-- Flow Steps -->
+      <?!= include('ui_comp_flow_steps') ?>
+
+      <!-- Messages Bar -->
+      <div id="messagesBar" class="messages-bar"></div>
+
+      <!-- Body: Proposal form / phase content -->
+      <div class="card" id="bodyCard">
+        <p style="text-align:center;color:var(--secondary-color);">Carregando…</p>
+      </div>
+
+      <!-- Actions Bar -->
+      <div class="actions-bar" id="actionsBar" style="display:none;"></div>
+
+      <!-- Activity log (ui_comp_event_log) -->
+      <div class="card" id="logCard" style="margin-top:16px;"></div>
+
+    </div>
+
+    <?!= include('ui_scripts') ?>
+    <?!= include('ui_comp_modal') ?>
+    <?!= include('ui_comp_event_log') ?>
+
+    <!-- Controller for Student -->
+    <script>
+      document.getElementById('headerViewDesc').innerText = 'Meu TCC (Visão do Aluno)';
+
+      // escHtml, renderFlowSteps and renderCommitteeSummary are shared helpers
+      // defined in ui_scripts.html; renderEventLog comes from ui_comp_event_log.
+
+      let currentPayload = null;
+
+      // O painel já chega montado dentro da página (ver _renderDashboard_ em
+      // main.js), o que poupa uma execução inteira do Apps Script — a espera
+      // entre o login e os dados na tela era, metade dela, a partida do runtime
+      // desta segunda execução. Consumido uma vez só: o "Tentar novamente" e
+      // toda ação continuam indo ao servidor, e um payload nulo (falha ao
+      // montar) cai no caminho antigo.
+      let initialPayload = <?!= typeof initialPayload !== 'undefined' && initialPayload ? initialPayload : 'null' ?>;
+
+      // ── Load dashboard data on page load ──────────────────────────────
+      function loadDashboard() {
+        if (initialPayload) {
+          const payload = initialPayload;
+          initialPayload = null;
+          return render(payload);
+        }
+        document.getElementById('bodyCard').innerHTML =
+          '<p style="text-align:center;color:var(--secondary-color);">Carregando…</p>';
+        // startLoadWatchdog/clearLoadWatchdog live in ui_scripts.html: the call
+        // can hang without either handler running, and the panel would stay on
+        // "Carregando…" forever.
+        startLoadWatchdog(onLoadTimeout);
+        google.script.run
+          .withSuccessHandler(function (payload) { clearLoadWatchdog(); render(payload); })
+          .withFailureHandler(function (err) { clearLoadWatchdog(); onLoadError(err); })
+          .getStudentDashboardData();
+      }
+      loadDashboard();
+
+      // Toda ação devolve o painel já atualizado, montado na mesma execução que
+      // gravou (ver _dashboardPayloadForRole_ em ServiceDashboard.js). Recarregar
+      // numa segunda execução mostrava o estado anterior à ação.
+      function applyResult(res) {
+        if (res && res.dashboard) render(res.dashboard);
+        else loadDashboard();
+      }
+
+      function render(payload) {
+        if (!payload || !payload.success) { return onLoadError((payload && payload.msg) || 'Dados não retornados do servidor.'); }
+        currentPayload = payload;
+
+        renderFlowSteps(payload.phaseIndex);
+        renderMessage(payload);
+        renderBody(payload);
+        renderActions(payload);
+        renderLog(payload);
+      }
+
+      function renderMessage(payload) {
+        const bar = document.getElementById('messagesBar');
+        let msg = '';
+        switch (payload.status) {
+          case 'Proposta Submetida':
+            msg = 'Sua proposta foi submetida e está aguardando a aprovação do Orientador.';
+            break;
+          case 'Proposta Retornada Para Ajustes':
+            msg = 'O Orientador solicitou ajustes (correção nº ' + (payload.data.Iterations || 1) + ') — veja a mensagem abaixo.';
+            break;
+          case 'Proposta Aprovada':
+            msg = 'Proposta aprovada pelo Orientador! Aguardando homologação do Responsável.';
+            break;
+          case 'Em Desenvolvimento':
+            msg = 'Proposta homologada! Você está na fase de Desenvolvimento do TCC, sob orientação do seu Orientador.';
+            break;
+          case 'TCC Concluído':
+            msg = 'TCC concluído. Aguardando o Orientador iniciar a Formação da Banca.';
+            break;
+          case 'Banca Submetida':
+            msg = 'Seu Orientador submeteu a banca. Aguardando homologação do Responsável.';
+            break;
+          case 'Banca Homologada':
+            msg = 'Banca homologada! Prepare-se para a defesa na data marcada.';
+            break;
+        }
+        if (msg) {
+          bar.innerText = msg;
+          bar.classList.toggle('is-error', payload.status === 'Proposta Retornada Para Ajustes');
+          bar.style.display = 'block';
+        } else {
+          bar.style.display = 'none';
+        }
+      }
+
+      function renderBody(payload) {
+        const card = document.getElementById('bodyCard');
+        const d = payload.data || {};
+        const readOnly = !payload.permissions.canEdit;
+
+        // Past the Proposal phase the form is over: the student sees a summary
+        // of the proposal plus whatever the current phase has to show.
+        if (payload.phaseIndex > 0) {
+          card.innerHTML = proposalSummaryHtml(d) +
+            '<hr style="border:none;border-top:1px solid var(--border-color);margin:20px 0;">' +
+            '<p style="text-align:center;color:var(--secondary-color);">' +
+            escHtml(phaseGuidance(payload.status)) + '</p>' +
+            workFileHtml(payload) +
+            renderCommitteeSummary(payload.committee) +
+            renderMinutesSummary(payload.defense) +
+            finalDeliveryHtml(payload);
+          return;
+        }
+
+        card.innerHTML = `
+          <div class="input-group">
+            <label>Título do Projeto</label>
+            <input type="text" id="fTitle" value="${escHtml(d.Title)}" ${readOnly ? 'disabled' : ''}>
+          </div>
+          <div class="form-row">
+            <div class="input-group">
+              <label>Matrícula</label>
+              <input type="text" id="fStudentId" value="${escHtml(d.StudentId)}" required ${readOnly ? 'disabled' : ''}>
+            </div>
+            <div class="input-group">
+              <label>Seu Telefone</label>
+              <input type="text" id="fStudentPhone" value="${escHtml(d.StudentPhone)}" ${readOnly ? 'disabled' : ''}>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="input-group">
+              <label>Data Prevista da Defesa</label>
+              <input type="date" id="fDefensePrediction" value="${escHtml(d.DefensePrediction)}" ${readOnly ? 'disabled' : ''}>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="input-group">
+              <label>E-mail do Orientador</label>
+              <input type="email" id="fAdvisorEmail" value="${escHtml(d.AdvisorEmail)}" ${readOnly ? 'disabled' : ''}
+                     ${readOnly ? '' : 'onblur="checkAdvisorEmail(this.value)"'}>
+              <!-- Já vem preenchida com o nome resolvido no servidor; o blur no
+                   campo revalida. Era a única exibição do nome do orientador —
+                   a linha cinza "Orientador: Nome" abaixo do formulário dizia o
+                   mesmo e foi removida. -->
+              <p id="advisorHint" style="font-size:12px;margin:4px 0 0;${
+                d.advisorName ? 'color:var(--success-color);' : ''}">${
+                d.advisorName ? '✓ ' + escHtml(d.advisorName) : ''}</p>
+            </div>
+            <div class="input-group">
+              <label>Telefone do Orientador</label>
+              <input type="text" id="fAdvisorPhone" value="${escHtml(d.AdvisorPhone)}" ${readOnly ? 'disabled' : ''}>
+            </div>
+          </div>
+          ${d.advisorRegistered === false ? `
+            <p class="file-link-hint" style="color:var(--error-color);">
+              ${escHtml(d.AdvisorEmail)} ainda não está cadastrado(a) como professor(a)
+              no sistema, e por isso não conseguiria entrar para avaliar a sua proposta.
+              O Responsável pela disciplina vê essa pendência no painel dele e faz o
+              cadastro — a submissão fica liberada logo depois. Até lá, você pode
+              continuar salvando o rascunho e escrevendo no documento.
+            </p>` : ''}
+          ${d.DocId
+            ? proposalDocLinkHtml(d.DocId) +
+              '<p class="file-link-hint">O conteúdo do trabalho — Resumo, Objetivos, ' +
+              'Metodologia e Referências — é escrito neste documento.</p>'
+            // Sem Doc ainda: dizer o que "Salvar Rascunho" faz. Sem isso o aluno
+            // vê um formulário sem Submeter e sem explicação de por quê.
+            : (readOnly ? '' :
+              '<p class="file-link-hint">Salve o rascunho para criar o documento ' +
+              'da proposta, onde você escreve o conteúdo do trabalho. A submissão ' +
+              'ao Orientador fica disponível depois disso.</p>')}
+        `;
+      }
+
+      // A linha do tempo é a mesma nos três painéis; o Aluno escreve nela em
+      // vez de ter um campo de mensagem preso ao formulário da proposta.
+      function renderLog(payload) {
+        const card = document.getElementById('logCard');
+        const proposalId = payload.data && payload.data.ProposalId;
+        if (!proposalId) { card.style.display = 'none'; return; }
+        card.style.display = 'block';
+        renderEventLog(card, payload.events, {
+          proposalId: proposalId,
+          canComment: true,
+          onApplied: applyResult
+        });
+      }
+
+      // What the student should do (or wait for) in each post-Proposal status
+      function phaseGuidance(status) {
+        switch (status) {
+          case 'Em Desenvolvimento':
+            return 'Ao concluir o desenvolvimento, anexe o trabalho em PDF abaixo e clique em "Concluir TCC" na barra de ações.';
+          case 'TCC Concluído':
+            return 'Aguardando o Orientador submeter a composição da banca.';
+          case 'Banca Submetida':
+            return 'Banca submetida pelo Orientador, aguardando homologação do Responsável.';
+          case 'Banca Homologada':
+            return 'Banca homologada. Após a defesa, o Orientador gera a Ata aqui no sistema.';
+          case 'Ata Gerada':
+            return 'O Orientador está lançando as notas e o parecer da banca na Ata.';
+          case 'Ata Em Assinaturas':
+            return 'A banca está assinando a Ata. O seu "de acordo" é a última assinatura.';
+          case 'Ata Assinada':
+            return 'Ata completa. Aguardando o Responsável homologar a defesa.';
+          case 'Defesa Homologada':
+            return 'Faça as alterações sugeridas pela banca, baixe a Folha de Aprovação, ' +
+                   'submeta ao RIU e envie abaixo o PDF final e o comprovante.';
+          case 'TCC Final Submetido':
+            return 'Entrega recebida. Aguardando o Responsável lançar a nota e finalizar.';
+          case 'TCC Finalizado':
+            return 'TCC finalizado. Parabéns!';
+          case 'TCC Finalizado por Aproveitamento':
+            return 'TCC finalizado por aproveitamento de estudos.';
+          case 'Não Finalizado':
+            return 'Este TCC foi encerrado sem finalização pelo Responsável.';
+          default:
+            return '';
+        }
+      }
+
+      /**
+       * Fase 5: a Folha de Aprovação para baixar, e as duas entregas finais.
+       *
+       * Os campos continuam abertos depois de o status avançar: o comprovante
+       * do RIU costuma chegar dias depois do PDF, e trocar um arquivo errado
+       * não deveria exigir pedir ajuda a ninguém.
+       */
+      function finalDeliveryHtml(payload) {
+        const p = payload.permissions;
+        const dfs = payload.defense;
+        if (!dfs) return '';
+
+        const podeBaixar = !!dfs.studentAgreedAt;
+        const id = payload.data ? payload.data.ProposalId : '';
+
+        let html = '';
+        if (podeBaixar) {
+          html += `<div style="margin-top:16px;">
+            ${defenseDocButtonHtml(id, 'folha', 'Folha de Aprovação (PDF)', dfs.approvalSheetPdfId)}
+            <p class="file-link-hint">Insira esta página na versão final do TCC, logo
+            após a folha de rosto — é exigência da Biblioteca Central para o RIU.</p>
+          </div>`;
+        }
+
+        if (!p.canSubmitFinalWork) {
+          if (dfs.finalWorkFileId || dfs.riuReceiptUrl) {
+            html += `<div style="margin-top:16px;">
+              ${dfs.finalWorkFileId ? workFileLinkHtml(dfs.finalWorkFileId, 'Versão final entregue') : ''}
+              ${dfs.riuReceiptUrl ? `<p class="file-link-hint">Comprovante do RIU:
+                 <a href="${escHtml(dfs.riuReceiptUrl)}" target="_blank">${escHtml(dfs.riuReceiptUrl)}</a></p>` : ''}
+            </div>`;
+          }
+          return html;
+        }
+
+        return html + `
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-color);">
+            <h4 style="margin:0 0 10px;">Entrega final</h4>
+            <div class="input-group">
+              <label for="fFinalWork">Versão final do TCC (PDF, até ${payload.workMaxMb} MB)</label>
+              <input type="file" id="fFinalWork" accept="application/pdf">
+              ${dfs.finalWorkFileId
+                ? workFileLinkHtml(dfs.finalWorkFileId, 'Já entregue — enviar outro substitui')
+                : ''}
+            </div>
+            <div class="input-group">
+              <label for="fRiuUrl">Comprovante de depósito no RIU (link)</label>
+              <input type="text" id="fRiuUrl" placeholder="https://riu.ufam.edu.br/..."
+                     value="${escHtml(dfs.riuReceiptUrl)}">
+            </div>
+          </div>`;
+      }
+
+      // O envio do trabalho aparece só enquanto ele é a ação da vez (fase de
+      // Desenvolvimento); depois vira o link do arquivo entregue, que é o que a
+      // banca vai ler.
+      function workFileHtml(payload) {
+        const d = payload.data || {};
+        if (d.WorkFileId) {
+          return workFileLinkHtml(d.WorkFileId, 'Trabalho enviado' +
+            (d.WorkUploadedAt ? ' em ' + formatEventDate(d.WorkUploadedAt) : ''));
+        }
+        if (!payload.permissions.canConclude) return '';
+        return `
+          <div class="input-group" style="margin-top:16px;">
+            <label>Trabalho final em PDF (até ${payload.workMaxMb} MB)</label>
+            <input type="file" id="fWorkFile" accept="application/pdf">
+            <p id="workFileHint" style="font-size:12px;color:var(--secondary-color);margin:4px 0 0;">
+              O arquivo fica guardado no sistema e é o que a banca vai receber para avaliar.
+            </p>
+          </div>`;
+      }
+
+      function proposalSummaryHtml(d) {
+        return `
+          <h3 style="margin-top:0;">${escHtml(d.Title)}</h3>
+          <p style="font-size:12px;color:var(--secondary-color);">
+            Orientador: ${escHtml(d.advisorName || d.AdvisorEmail)} —
+            Defesa prevista: ${escHtml(formatDateBr(d.DefensePrediction))}
+          </p>
+          ${proposalDocLinkHtml(d.DocId)}
+        `;
+      }
+
+      function renderActions(payload) {
+        const bar = document.getElementById('actionsBar');
+        const p = payload.permissions;
+        const buttons = [];
+
+        // "Submeter" segue o canSubmit do servidor, e não o canEdit: sem
+        // proposta gravada não há o que submeter. Mostrá-lo desde o início
+        // criava um Doc só com o texto do template e o mandava para o
+        // Orientador — e, pior, o próprio submit rebaixa o aluno a comentarista,
+        // então ele nem podia mais escrever no documento sem que a proposta
+        // fosse devolvida. Na primeira vez o caminho é "Salvar Rascunho", que é
+        // o que cria a proposta e o Doc.
+        if (p.canEdit) {
+          buttons.push('<button class="btn btn-secondary" onclick="clearForm()">Limpar</button>');
+          buttons.push(`<button class="btn ${p.canSubmit ? 'btn-secondary' : 'btn-primary'}" onclick="saveDraft(this)">Salvar Rascunho</button>`);
+        }
+        // Orientador não cadastrado: submeter criaria uma proposta que ninguém
+        // pode aprovar (o papel de Orientador vem da tabela de professores, e
+        // sem ela o professor nem entra no app). O rascunho continua liberado —
+        // é o que cria o Doc, e o aluno segue escrevendo enquanto o Responsável
+        // resolve a pendência. O servidor recusa de qualquer forma.
+        const advisorPending = payload.data && payload.data.advisorRegistered === false;
+        if (p.canSubmit && !advisorPending) {
+          buttons.push('<button class="btn btn-primary" onclick="submitProposal(this)">Submeter</button>');
+        }
+        if (p.canConclude) {
+          buttons.push('<button class="btn btn-primary" onclick="concludeTcc(this)">Concluir TCC</button>');
+        }
+        // O de acordo só aparece quando a banca inteira já assinou — o servidor
+        // recusa antes disso, e um botão que só produz erro é pior que nenhum.
+        if (p.canAgree) {
+          buttons.push('<button class="btn btn-primary" onclick="studentAgreement(this)">Dar o de acordo na Ata</button>');
+        }
+        if (p.canSubmitFinalWork) {
+          buttons.push('<button class="btn btn-primary" onclick="submitFinalWork(this)">Enviar entrega final</button>');
+        }
+
+        if (buttons.length === 0) {
+          bar.style.display = 'none';
+        } else {
+          bar.innerHTML = buttons.join('');
+          bar.style.display = 'flex';
+        }
+      }
+
+      // Confirma quem é o orientador enquanto o formulário é preenchido: um
+      // e-mail com erro de digitação, sem isso, só apareceria depois de salvar
+      // (e a proposta ficaria pendurada num orientador inexistente).
+      function checkAdvisorEmail(email) {
+        const hint = document.getElementById('advisorHint');
+        if (!hint) return;
+        if (!email || !email.trim()) { hint.innerText = ''; return; }
+
+        hint.style.color = 'var(--secondary-color)';
+        hint.innerText = 'Verificando…';
+        google.script.run
+          .withSuccessHandler(res => {
+            if (res && res.found) {
+              hint.style.color = 'var(--success-color)';
+              hint.innerText = '✓ ' + res.name;
+            } else {
+              hint.style.color = 'var(--error-color)';
+              // O servidor manda uma mensagem própria quando sabe algo mais
+              // específico do que "não achei" — hoje, o e-mail de um membro
+              // externo, que está cadastrado mas não orienta.
+              hint.innerText = (res && res.msg) ? res.msg :
+                'Nenhum professor cadastrado com este e-mail. ' +
+                'Você pode salvar o rascunho assim mesmo; a submissão fica liberada ' +
+                'quando o Responsável cadastrar o(a) orientador(a).';
+            }
+          })
+          .withFailureHandler(() => { hint.innerText = ''; })
+          .lookupAdvisorName(email);
+      }
+
+      function clearForm() {
+        ['fTitle', 'fStudentId', 'fDefensePrediction', 'fStudentPhone', 'fAdvisorEmail', 'fAdvisorPhone']
+          .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        const hint = document.getElementById('advisorHint');
+        if (hint) hint.innerText = '';
+      }
+
+      function collectFormData() {
+        const data = {};
+        if (currentPayload.data && currentPayload.data.ProposalId) data.ProposalId = currentPayload.data.ProposalId;
+        data.Title             = document.getElementById('fTitle').value;
+        data.StudentId         = document.getElementById('fStudentId').value;
+        data.DefensePrediction = document.getElementById('fDefensePrediction').value;
+        data.StudentPhone      = document.getElementById('fStudentPhone').value;
+        data.AdvisorEmail      = document.getElementById('fAdvisorEmail').value;
+        data.AdvisorPhone      = document.getElementById('fAdvisorPhone').value;
+        return data;
+      }
+
+      function saveDraft(btn) {
+        // Salvar o primeiro rascunho cria o Google Doc da proposta, o que leva
+        // alguns segundos — daí o estado de espera (beginBusy, ui_scripts.html).
+        const done = beginBusy(btn, 'Salvando…');
+        google.script.run
+          .withSuccessHandler(res => {
+            done();
+            if (res && res.success) { showMessage('Rascunho salvo com sucesso!'); applyResult(res); }
+            else showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+          })
+          .withFailureHandler(err => { done(); showMessage('Erro técnico: ' + err.message, true); })
+          .cmdSaveDraft(collectFormData());
+      }
+
+      function submitProposal(btn) {
+        // O que estiver na tela é o que vale: os dados do formulário vão junto
+        // do comando e o servidor salva antes de submeter (ver
+        // ServiceProposal.submitProposal). Antes disso, editar um campo e
+        // clicar direto em Submeter descartava a edição em silêncio. O botão só
+        // existe quando já há proposta gravada, então aqui sempre há ProposalId.
+        const data = collectFormData();
+        const missing = missingRequiredFields(data);
+        if (missing) { showMessage(missing, true); return; }
+
+        appConfirm('Confirmar submissão da proposta para aprovação do Orientador?').then(ok => {
+          if (!ok) return;
+          const done = beginBusy(btn, 'Submetendo…');
+          google.script.run
+            .withSuccessHandler(res => {
+              done();
+              if (res && res.success) { showMessage('Proposta submetida com sucesso!'); applyResult(res); }
+              else showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+            })
+            .withFailureHandler(err => { done(); appAlert('Erro técnico: ' + err.message); })
+            .cmdSubmitProposal(data.ProposalId || '', data);
+        });
+      }
+
+      // Só o mínimo para não submeter (nem criar o Google Doc) com o essencial
+      // em branco — a validação de verdade continua sendo a do servidor.
+      function missingRequiredFields(data) {
+        if (!data.Title.trim())        return 'Informe o título do projeto antes de submeter.';
+        if (!data.StudentId.trim())    return 'Informe sua matrícula antes de submeter.';
+        if (!data.AdvisorEmail.trim()) return 'Informe o e-mail do Orientador antes de submeter.';
+        return '';
+      }
+
+      // Concluir o TCC exige o trabalho anexado: é o que transforma o fim do
+      // Desenvolvimento numa entrega, e é o arquivo que a banca vai ler. As
+      // checagens aqui poupam o aluno de esperar o envio de um arquivo que o
+      // servidor recusaria — a validação que vale continua sendo a de lá.
+      function concludeTcc(btn) {
+        const input = document.getElementById('fWorkFile');
+        const file = input && input.files && input.files[0];
+        const maxMb = currentPayload.workMaxMb;
+
+        if (!file) {
+          showMessage('Anexe o trabalho em PDF para concluir o TCC.', true);
+          if (input) input.focus();
+          return;
+        }
+        if (file.type !== 'application/pdf') {
+          showMessage('O trabalho deve estar em PDF.', true);
+          return;
+        }
+        if (file.size > maxMb * 1024 * 1024) {
+          showMessage('O arquivo tem ' + (file.size / 1048576).toFixed(1) + ' MB e o limite é ' +
+                      maxMb + ' MB. Comprima o PDF e tente novamente.', true);
+          return;
+        }
+
+        appConfirm('Concluir o TCC enviando "' + file.name + '"? ' +
+                   'Esta ação libera a fase de Formação da Banca.').then(ok => {
+          if (!ok) return;
+          const done = beginBusy(btn, 'Enviando…');
+
+          const reader = new FileReader();
+          reader.onerror = function () { done(); appAlert('Não foi possível ler o arquivo.'); };
+          reader.onload = function () {
+            // readAsDataURL devolve "data:<tipo>;base64,<bytes>" — o servidor
+            // quer só os bytes.
+            const bytes = String(reader.result).split(',')[1];
+            google.script.run
+              .withSuccessHandler(res => {
+                done();
+                if (res && res.success) { showMessage('TCC concluído e trabalho enviado!'); applyResult(res); }
+                else showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+              })
+              .withFailureHandler(err => { done(); appAlert('Erro técnico: ' + err.message); })
+              .cmdConcludeTcc(currentPayload.data.ProposalId, {
+                name: file.name, mimeType: file.type, bytes: bytes
+              });
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+
+      function studentAgreement(btn) {
+        appConfirm('Dar o seu de acordo na Ata da Defesa?\n\n' +
+                   'Esta é a última assinatura, e ela vale também para a Folha de ' +
+                   'Aprovação. Depois dela a Ata não pode mais ser alterada.').then(ok => {
+          if (!ok) return;
+          const done = beginBusy(btn, 'Assinando…');
+          google.script.run
+            .withSuccessHandler(res => {
+              done();
+              if (res && res.success) { showMessage('De acordo registrado. Ata completa!'); applyResult(res); }
+              else showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+            })
+            .withFailureHandler(err => { done(); appAlert('Erro técnico: ' + err.message); })
+            .cmdStudentAgreement(currentPayload.data.ProposalId);
+        });
+      }
+
+      /**
+       * Entrega final: o PDF e o comprovante do RIU, juntos ou separados.
+       *
+       * Os dois campos são opcionais aqui de propósito — o servidor é que exige
+       * pelo menos um, e só avança o status quando os DOIS existirem. É comum o
+       * comprovante do RIU chegar dias depois do PDF.
+       */
+      function submitFinalWork(btn) {
+        const input = document.getElementById('fFinalWork');
+        const file = input && input.files && input.files[0];
+        const riuUrl = (document.getElementById('fRiuUrl') || {}).value || '';
+        const maxMb = currentPayload.workMaxMb;
+
+        if (!file && !riuUrl.trim()) {
+          showMessage('Anexe o PDF final, informe o comprovante do RIU, ou os dois.', true);
+          return;
+        }
+        if (file && file.type !== 'application/pdf') {
+          showMessage('A versão final deve estar em PDF.', true);
+          return;
+        }
+        if (file && file.size > maxMb * 1024 * 1024) {
+          showMessage('O arquivo tem ' + (file.size / 1048576).toFixed(1) + ' MB e o limite é ' +
+                      maxMb + ' MB. Comprima o PDF e tente novamente.', true);
+          return;
+        }
+
+        const send = (bytes) => {
+          const done = beginBusy(btn, 'Enviando…');
+          google.script.run
+            .withSuccessHandler(res => {
+              done();
+              if (res && res.success) {
+                showMessage(res.complete
+                  ? 'Entrega final completa! Aguardando o Responsável finalizar.'
+                  : 'Recebido. Falta a outra parte da entrega para concluir.');
+                applyResult(res);
+              } else showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+            })
+            .withFailureHandler(err => { done(); appAlert('Erro técnico: ' + err.message); })
+            .cmdSubmitFinalWork(currentPayload.data.ProposalId, {
+              riuUrl: riuUrl,
+              file: bytes ? { name: file.name, mimeType: file.type, bytes: bytes } : null
+            });
+        };
+
+        if (!file) { send(null); return; }
+        const reader = new FileReader();
+        reader.onerror = function () { appAlert('Não foi possível ler o arquivo.'); };
+        reader.onload = function () { send(String(reader.result).split(',')[1]); };
+        reader.readAsDataURL(file);
+      }
+
+      function showMessage(msg, isError) {
+        const bar = document.getElementById('messagesBar');
+        bar.innerText = msg;
+        bar.classList.toggle('is-error', !!isError);
+        bar.style.display = 'block';
+        setTimeout(() => { if (currentPayload) renderMessage(currentPayload); }, 4000);
+      }
+
+      function onLoadError(err) {
+        document.getElementById('bodyCard').innerHTML =
+          '<p style="text-align:center;color:var(--error-color);">Erro ao carregar dados: ' + escHtml(String(err)) + '</p>';
+      }
+
+      function onLoadTimeout() {
+        document.getElementById('bodyCard').innerHTML = loadTimeoutHtml();
+      }
+    </script>
+  </body>
+</html>

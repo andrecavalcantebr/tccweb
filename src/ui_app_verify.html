@@ -1,0 +1,136 @@
+<!-- FILE: ui_app_verify.html -->
+<!-- DESC: public-ish verification of a minutes/approval-sheet validation key -->
+<!-- AUTH: Andre Cavalcante -->
+<!-- DATE: August, 2026 -->
+<!-- LICENCE: GPL-v3 -->
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <?!= include('ui_styles') ?>
+  </head>
+  <body>
+    <div style="display:none;"><?!= include('ui_asset_logo1') ?></div>
+
+    <div class="flex-center">
+      <div class="container card" style="max-width:720px;">
+        <div style="text-align:center; margin-bottom:20px;">
+          <img id="logo1" height="120" />
+        </div>
+
+        <h2>Verificar documento</h2>
+        <p style="color:var(--secondary-color);font-size:14px;">
+          Informe a chave de validação impressa no rodapé da Ata da Defesa ou da
+          Folha de Aprovação. A conferência recalcula as assinaturas a partir do
+          registro: se algo tiver sido alterado depois de assinado, elas deixam
+          de conferir.
+        </p>
+
+        <p style="font-size:13px;">A consulta exige uma conta Google e uma sessão ativa
+          no TCC-WebApp. Se ainda não entrou, use “Voltar ao sistema” para fazer login.</p>
+
+        <div class="form-row" style="align-items:flex-end;">
+          <div class="input-group" style="flex:1;">
+            <label for="fKey">Chave de validação</label>
+            <input type="text" id="fKey" value="<?= presetKey ?>" placeholder="Ex.: H7K2M9P4RT"
+                   style="text-transform:uppercase;letter-spacing:2px;font-family:monospace;">
+          </div>
+          <div style="padding-bottom:16px;">
+            <button class="btn btn-primary" onclick="verify(this)" style="width:auto;padding:10px 20px;">
+              Verificar
+            </button>
+          </div>
+        </div>
+
+        <div id="result" style="margin-top:16px;"></div>
+
+        <p style="text-align:center;margin-top:20px;font-size:13px;">
+          <a href="<?= ScriptApp.getService().getUrl() ?>" target="_top">← Voltar ao sistema</a>
+        </p>
+      </div>
+    </div>
+
+    <?!= include('ui_scripts') ?>
+
+    <script>
+      document.getElementById('logo1').src = AppAssets['logo1'];
+
+      function verify(btn) {
+        const key = document.getElementById('fKey').value.trim();
+        if (!key) return;
+        const done = beginBusy(btn, 'Verificando…');
+        google.script.run
+          .withSuccessHandler(res => { done(); renderResult(res); })
+          .withFailureHandler(err => {
+            done();
+            document.getElementById('result').innerHTML =
+              '<p style="color:var(--error-color);">Erro técnico: ' + escHtml(err.message) + '</p>';
+          })
+          .verifyDefenseKey(key);
+      }
+
+      function renderResult(res) {
+        const box = document.getElementById('result');
+        if (!res || !res.found) {
+          box.innerHTML = `<div style="padding:14px;background:#fdecea;border:1px solid #f44336;border-radius:8px;">
+            <strong style="color:#c62828;">Não encontrado.</strong>
+            <p style="margin:6px 0 0;font-size:13px;">${escHtml((res && res.msg) || 'Chave inválida.')}</p>
+          </div>`;
+          return;
+        }
+
+        // O veredito vem em primeiro, grande: é a única coisa que quem verifica
+        // um documento quer saber, e enterrá-lo abaixo da tabela obrigaria a
+        // pessoa a interpretar linha por linha.
+        const selo = res.integro
+          ? `<div style="padding:14px;background:var(--success-bg,#e8f5e9);border:1px solid var(--success-color,#4caf50);border-radius:8px;">
+               <strong style="color:var(--success-color,#2e7d32);">✓ Documento íntegro.</strong>
+               <p style="margin:6px 0 0;font-size:13px;">Todas as assinaturas conferem com o
+               conteúdo registrado no sistema.</p></div>`
+          : `<div style="padding:14px;background:#fdecea;border:1px solid #f44336;border-radius:8px;">
+               <strong style="color:#c62828;">⚠ As assinaturas não conferem.</strong>
+               <p style="margin:6px 0 0;font-size:13px;">O conteúdo registrado mudou depois de
+               assinado, ou faltam assinaturas. Procure o professor responsável pela
+               disciplina.</p></div>`;
+
+        const linhas = (res.signatures || []).map(s => `
+          <tr>
+            <td>${escHtml(s.nome)}</td>
+            <td style="font-size:12px;">${escHtml(formatStamp(s.assinadoEm) || '—')}</td>
+            <td style="text-align:center;">${s.confere
+              ? '<span style="color:var(--success-color);">✓ confere</span>'
+              : '<span style="color:var(--error-color);">✗ não confere</span>'}</td>
+          </tr>`).join('');
+
+        box.innerHTML = selo + `
+          <table class="data-table" style="margin-top:16px;">
+            <tbody>
+              <tr><th style="width:160px;">Aluno</th><td>${escHtml(res.aluno)}</td></tr>
+              <tr><th>Trabalho</th><td>${escHtml(res.titulo)}</td></tr>
+              <tr><th>Defesa</th><td>${escHtml(res.defesa)}</td></tr>
+              <tr><th>Parecer</th><td>${escHtml(res.parecer)}</td></tr>
+              <tr><th>Média final</th><td>${escHtml(res.media)}</td></tr>
+            </tbody>
+          </table>
+          <h4 style="margin:16px 0 6px;">Assinaturas</h4>
+          <table class="data-table">
+            <thead><tr><th>Membro</th><th>Data</th><th style="text-align:center;">Conferência</th></tr></thead>
+            <tbody>${linhas}
+              <tr>
+                <td>De acordo do aluno</td>
+                <td style="font-size:12px;">${escHtml(res.studentAgreement.assinadoEm || '—')}</td>
+                <td style="text-align:center;">${res.studentAgreement.confere
+                  ? '<span style="color:var(--success-color);">✓ confere</span>'
+                  : '<span style="color:var(--error-color);">✗ não confere</span>'}</td>
+              </tr>
+            </tbody>
+          </table>`;
+      }
+
+      // Chave veio na URL: verifica sozinho, que é o caso de quem clicou num link.
+      if (document.getElementById('fKey').value.trim()) {
+        verify(document.querySelector('.btn-primary'));
+      }
+    </script>
+  </body>
+</html>

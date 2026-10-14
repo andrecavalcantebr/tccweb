@@ -1,0 +1,104 @@
+<!-- FILE: ui_app_enrollment.html -->
+<!-- DESC: student self-enrolment page and controller (term code) -->
+<!-- AUTH: Andre Cavalcante -->
+<!-- DATE: August, 2026 -->
+<!-- LICENSE: GPL-v3 -->
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <?!= include('ui_styles') ?>
+  </head>
+  <body>
+    <!-- Hidden Assets -->
+    <div style="display:none;"><?!= include('ui_asset_logo1') ?></div>
+
+    <div class="flex-center">
+      <div class="container card">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <img id="logo1" height="120" />
+        </div>
+        <h2 style="text-align: center; color: var(--primary-color);">Primeiro acesso do aluno</h2>
+
+        <? if (message) { ?>
+          <p style="background:#fef7e0; border-left:3px solid #f9ab00; padding:10px; border-radius:4px;">
+            <?= message ?>
+          </p>
+        <? } ?>
+
+        <p style="color: var(--secondary-color);">
+          Informe o <strong>código do período letivo</strong> divulgado pelo professor
+          responsável pela disciplina (ele está no Plano de Ensino). Os dados abaixo
+          vão para os documentos oficiais do seu TCC, então confira o nome e a matrícula.
+        </p>
+
+        <!-- Mesmo POST + target="_top" do login: ver ui_app_login.html -->
+        <form id="enrollForm" action="<?= ScriptApp.getService().getUrl() ?>" method="POST" target="_top">
+          <input type="hidden" name="page" value="validate_enrollment">
+          <input type="hidden" name="nonce" value="<?= typeof loginNonce !== 'undefined' ? loginNonce : '' ?>">
+
+          <div class="input-group">
+            <label for="userEmail">E-mail</label>
+            <? if (userEmail) { ?>
+              <input type="email" id="userEmail" name="email" value="<?= userEmail ?>" readonly style="background-color: #f1f3f4; color: #5f6368;">
+            <? } else { ?>
+              <input type="email" id="userEmail" name="email" required placeholder="seu-email@ufam.edu.br">
+              <small style="color: var(--secondary-color);">
+                Entre no navegador com a sua conta <strong>@ufam.edu.br</strong> antes de
+                se cadastrar: é ela que identifica você no sistema.
+              </small>
+            <? } ?>
+          </div>
+
+          <div class="input-group">
+            <label for="userName">Nome completo</label>
+            <input type="text" id="userName" name="name" required value="<?= displayName ?>" placeholder="Como deve aparecer na Ata e na Folha de Aprovação">
+          </div>
+
+          <div class="input-group">
+            <label for="studentId">Matrícula</label>
+            <input type="text" id="studentId" name="studentId" required placeholder="Sua matrícula na UFAM">
+          </div>
+
+          <div class="input-group">
+            <label for="phone">Telefone (opcional)</label>
+            <input type="text" id="phone" name="phone" placeholder="(92) 90000-0000">
+          </div>
+
+          <div class="input-group">
+            <label for="code">Código do período letivo</label>
+            <input type="text" id="code" name="code" required maxlength="12"
+                   value="<?= typeof presetCode !== 'undefined' ? presetCode : '' ?>"
+                   placeholder="Ex.: H7K2M9" style="text-transform: uppercase; letter-spacing: 2px;">
+          </div>
+
+          <button type="submit" id="btnEnroll" class="btn btn-primary" style="margin-top: 10px;">Entrar no período letivo</button>
+        </form>
+
+        <p style="text-align:center; margin-top: 18px;">
+          <a href="<?= ScriptApp.getService().getUrl() ?>" target="_top">Voltar ao login</a>
+        </p>
+      </div>
+    </div>
+
+    <?!= include('ui_scripts') ?>
+
+    <script>
+      if (typeof AppAssets !== 'undefined') {
+        document.getElementById('logo1').src = AppAssets['logo1'];
+      }
+
+      // O código é gravado e comparado em maiúsculas (ver processEnrollment):
+      // normalizar aqui evita a recusa mais boba possível, a de quem digitou
+      // certo em minúsculas.
+      document.getElementById('code').addEventListener('input', function() {
+        this.value = this.value.toUpperCase();
+      });
+
+      document.getElementById('enrollForm').addEventListener('submit', function() {
+        document.getElementById('btnEnroll').innerText = "Cadastrando...";
+        // Submissão síncrona com target="_top" — sem preventDefault
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+# Credenciais OAuth — não commitar
+*.clasprc*.json
+.env
+.aider*
+__pycache__/
+
+# Saída do tools/md2doc.sh — derivada dos .md, não versionar.
+# Restrito a docs/: os *.html de src/ são fonte do app.
+docs/**/*.html
+docs/**/*.pdf

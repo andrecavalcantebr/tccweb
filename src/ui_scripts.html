@@ -1,0 +1,349 @@
+<script>
+/**
+ * FILE: ui_scripts.html — Funções auxiliares do Frontend.
+ * DESC: Client-side helper functions and session management.
+ * AUTH: Andre Cavalcante
+ * DATE: July, 2026
+ * LICENCE: GPL-v3
+ */
+
+// O timeout de sessão é inteiramente do servidor (SESSION_TIMEOUT_MINUTES em
+// utils.js): a entrada de cada página passa por getValidCurrentSession e os
+// comandos de escrita por assertActiveSession. Havia aqui um SessionManager
+// que gravava a última atividade no localStorage a cada mousemove — ninguém
+// nunca leu o valor, e um relógio de sessão que vive no cliente não decide
+// nada de qualquer forma.
+
+/**
+ * Marks an action as in progress: shows a spinner on the clicked button and
+ * disables every button in the same bar, so a slow server call (creating the
+ * proposal Doc takes seconds) can't be clicked twice and doesn't look like
+ * nothing happened.
+ *
+ * Returns the function that restores the previous state — call it in both the
+ * success and the failure handlers.
+ */
+function beginBusy(btn, label) {
+  // Only a real actions bar is blocked as a unit. Buttons living elsewhere
+  // (one per row in the Incharge master table, for instance) block alone —
+  // disabling the whole table would be far more than the user asked for.
+  const bar = btn ? btn.closest('.actions-bar') : null;
+  const buttons = bar ? Array.prototype.slice.call(bar.querySelectorAll('button')) : (btn ? [btn] : []);
+  const previous = buttons.map(b => ({ el: b, disabled: b.disabled, html: b.innerHTML }));
+
+  buttons.forEach(b => { b.disabled = true; });
+  if (btn) {
+    btn.innerHTML = '<span class="btn-spinner"></span>' + escHtml(label || 'Aguarde…');
+  }
+  setBusyCursor(true);
+
+  return function restore() {
+    previous.forEach(p => { p.el.disabled = p.disabled; p.el.innerHTML = p.html; });
+    setBusyCursor(false);
+  };
+}
+
+/**
+ * Busy cursor over the WHOLE page. Setting it on document.body only covers
+ * the area the content occupies — below that, the html element takes over and
+ * the cursor goes back to normal. The class also beats the pointer/text
+ * cursors of buttons and inputs (see .app-busy in ui_styles.html).
+ */
+function setBusyCursor(busy) {
+  document.documentElement.classList.toggle('app-busy', !!busy);
+}
+
+/**
+ * A URL do app e o período, servidos em atributo no cabeçalho.
+ *
+ * Não são interpolados numa string JS de propósito: o escape do scriptlet de
+ * impressão é contextual, e quando ele se perde devolve o valor JÁ entre aspas
+ * — dentro das aspas que o código tinha, o resultado era uma string vazia
+ * seguida do resto solto, e o bloco inteiro deixava de compilar. Em atributo
+ * HTML o contexto é inequívoco. Ver rationale 7.11.
+ *
+ * Só existe nas telas que incluem ui_comp_page_header; as demais não precisam.
+ */
+function appUrl() {
+  const el = document.querySelector('.page-header');
+  return el ? (el.dataset.appUrl || '') : '';
+}
+
+function appSemester() {
+  const el = document.querySelector('.page-header');
+  return el ? (el.dataset.semester || '') : '';
+}
+
+/**
+ * Compartilhado entre o painel do Responsável (que gera e regenera o código)
+ * e o do Orientador, na guia "Convite aos Alunos" (que só o lê, para repassar
+ * aos próprios alunos).
+ */
+function enrollmentLinkFor(code) {
+  if (!code) return '';
+  const target = appUrl() + '?page=enrollment&code=' + encodeURIComponent(code);
+  return 'https://accounts.google.com/AccountChooser?continue=' + encodeURIComponent(target);
+}
+
+// navigator.clipboard costuma ser barrado dentro do iframe do Apps Script,
+// então o caminho principal é selecionar o campo e usar execCommand — e,
+// se nem isso passar, o texto fica selecionado para o Ctrl+C.
+function copyEnrollmentLink(fieldId) {
+  const field = document.getElementById(fieldId || 'enrollmentLink');
+  if (!field || !field.value) return;
+  field.select();
+  field.setSelectionRange(0, field.value.length);
+  let copied = false;
+  try { copied = document.execCommand('copy'); } catch(e) { copied = false; }
+  showMessage(copied ? 'Link copiado.' : 'Link selecionado — use Ctrl+C para copiar.');
+}
+
+/**
+ * Watchdog for the initial dashboard load.
+ *
+ * A google.script.run call can hang with NEITHER handler ever running: the
+ * request leaves and the answer never comes back. It is not a server error —
+ * every dashboard function wraps its body in try/catch and answers
+ * {success:false}, so a server failure always reaches the screen. What breaks
+ * is the transport (a dropped connection, or the /a/<domain>/ URL opened with
+ * an active account from another domain).
+ *
+ * Without this, the panel sat on "Carregando…" forever, with no way to tell a
+ * slow load from a dead one — against the project rule that every action needs
+ * a visible outcome. Reloading the page has cleared every occurrence seen so
+ * far, hence the hint in the message.
+ */
+var LOAD_TIMEOUT_MS = 20000;
+var _loadWatchdogId = null;
+
+function startLoadWatchdog(onTimeout) {
+  clearLoadWatchdog();
+  _loadWatchdogId = setTimeout(function () {
+    _loadWatchdogId = null;
+    onTimeout();
+  }, LOAD_TIMEOUT_MS);
+}
+
+function clearLoadWatchdog() {
+  if (_loadWatchdogId !== null) {
+    clearTimeout(_loadWatchdogId);
+    _loadWatchdogId = null;
+  }
+}
+
+// Retry calls loadDashboard() — defined by the controller of each panel — instead of
+// reloading the page: repeating just the call is cheaper, and navigating the
+// top window from here would need a transient activation we do not have.
+function loadTimeoutHtml() {
+  return '<p style="text-align:center;color:var(--error-color);margin-bottom:12px;">' +
+    'O servidor não respondeu. A conexão pode ter falhado.</p>' +
+    '<p style="text-align:center;">' +
+    '<button class="btn btn-primary" onclick="loadDashboard()">Tentar novamente</button></p>' +
+    '<p style="text-align:center;color:var(--secondary-color);font-size:12px;margin-top:8px;">' +
+    'Se não resolver, recarregue a página (F5).</p>';
+}
+
+/**
+ * Link to the TCC file the student uploaded to close the Development phase.
+ *
+ * Shared by the three panels: the Student checks what was delivered, the
+ * Advisor reads it to assemble the committee, and the Incharge sees it in the
+ * detail view. The file lives in the term folder and belongs to the app, so
+ * everyone who should read it was granted access by the system.
+ */
+function workFileLinkHtml(fileId, label) {
+  if (!fileId) return '';
+  return `<a class="file-link" target="_blank"
+     href="https://drive.google.com/file/d/${escHtml(fileId)}/view">📎 ${escHtml(label || 'Abrir Trabalho (PDF)')}</a>`;
+}
+
+/**
+ * Link to the student's proposal Google Doc, where the rich content lives
+ * (Resumo, Objetivos, Metodologia, Referências — the form holds only the
+ * structured fields).
+ *
+ * Same contract as workFileLinkHtml: an empty id yields an empty string, so no
+ * call site needs a ternary of its own. The four panels used to carry this
+ * markup copied by hand, which meant five places to touch for one style change.
+ */
+function proposalDocLinkHtml(docId, label) {
+  if (!docId) return '';
+  return `<a class="file-link" target="_blank"
+     href="https://docs.google.com/document/d/${escHtml(docId)}/edit">📄 ${escHtml(label || 'Abrir Documento da Proposta')}</a>`;
+}
+
+/**
+ * Resumo da Ata em leitura, compartilhado pelos três painéis e pela tela de
+ * assinatura — pelo mesmo motivo de renderCommitteeSummary: quatro cópias do
+ * mesmo bloco significam quatro lugares para mudar quando o layout muda.
+ */
+function renderMinutesSummary(defense, options) {
+  if (!defense) return '';
+  const opts = options || {};
+
+  const linhas = (defense.membros || []).map(m => `
+    <tr>
+      <td>${escHtml(m.nome)}${m.isPresidente ? ' <span class="badge badge-neutral">presidente</span>' : ''}</td>
+      ${defense.anonymousGrades ? '' : `<td style="font-size:12px;">${escHtml(m.titulo || '—')} · ${escHtml(m.inst || '—')}</td>`}
+      ${opts.hideGrades ? '' : `<td style="text-align:center;">${escHtml(m.nota === '' ? '—' : m.nota)}</td>`}
+      ${defense.anonymousGrades ? '' : `<td style="text-align:center;font-size:12px;">${m.assinadoEm
+        ? '<span style="color:var(--success-color);">✓ ' + escHtml(formatStamp(m.assinadoEm)) + '</span>'
+        : '<span style="color:var(--secondary-color);">aguardando</span>'}</td>`}
+    </tr>`).join('');
+
+  const studentSignature = defense.studentAgreedAt
+    ? '<span style="color:var(--success-color);">✓ ' + escHtml(formatStamp(defense.studentAgreedAt)) + '</span>'
+    : '<span style="color:var(--secondary-color);">' +
+      (defense.pendentes === 0 ? 'aguardando de acordo do aluno' : 'aguardando assinaturas da banca') + '</span>';
+  const studentRow = `<tr>
+    <td colspan="${opts.hideGrades ? 2 : 3}">Aluno(a) <span class="badge badge-neutral">de acordo</span></td>
+    <td style="text-align:center;font-size:12px;">${studentSignature}</td>
+  </tr>`;
+
+  return `
+    <div style="margin-top:16px;">
+      <h4 style="margin:0 0 8px;">Ata da Defesa</h4>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Membro</th>${defense.anonymousGrades ? '' : '<th>Titulação · Instituição</th>'}
+            ${opts.hideGrades ? '' : '<th style="text-align:center;">Nota</th>'}
+            ${defense.anonymousGrades ? '' : '<th style="text-align:center;">Assinatura</th>'}
+          </tr>
+        </thead>
+        <tbody>${linhas}${defense.anonymousGrades ? '' : studentRow}</tbody>
+      </table>
+      ${defense.anonymousGrades ? `<table class="data-table" style="margin-top:8px;">
+        <thead><tr><th>Assinatura</th><th style="text-align:right;">Situação</th></tr></thead>
+        <tbody><tr><td>De acordo do aluno</td><td style="text-align:right;font-size:12px;">${studentSignature}</td></tr></tbody>
+      </table>` : ''}
+      ${!defense.studentAgreedAt && defense.pendentes === 0 ? `<p style="font-size:13px;margin:8px 0 0;">
+        <strong>Aguardando de acordo do aluno.</strong> Todos os professores já assinaram.
+        O aluno deve acessar seu painel e clicar em “Dar o de acordo na Ata”.</p>` : ''}
+      <p style="font-size:13px;margin:10px 0 0;">
+        ${defense.parecer ? '<strong>Parecer:</strong> ' + escHtml(defense.parecer) + ' · ' : ''}
+        ${defense.media !== '' && defense.media !== undefined
+          ? '<strong>Média:</strong> ' + escHtml(defense.media) : ''}
+      </p>
+      ${defense.observacoes ? `<p style="font-size:13px;margin:6px 0 0;">
+        <strong>Observações da banca:</strong> ${escHtml(defense.observacoes)}</p>` : ''}
+      ${defense.validationKey ? `<p class="file-link-hint" style="margin-top:8px;">
+        Chave de validação: <code>${escHtml(defense.validationKey)}</code> — é ela que
+        permite conferir os documentos emitidos.
+        <a href="${escHtml(appUrl() + '?page=verify&key=' + encodeURIComponent(defense.validationKey))}" target="_top">Verificar documento</a></p>` : ''}
+    </div>`;
+}
+
+/** ISO do servidor → data legível. Vazio continua vazio. */
+function formatStamp(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+/**
+ * Botão que emite (ou reabre) um dos PDFs da defesa.
+ *
+ * O arquivo é gerado no servidor na primeira vez e reusado depois, então o
+ * botão vira link assim que existir — daí ele receber o id já conhecido.
+ */
+function defenseDocButtonHtml(proposalId, kind, label, existingId) {
+  if (existingId) {
+    return `<a class="file-link" target="_blank"
+       href="https://drive.google.com/file/d/${escHtml(existingId)}/view">📄 ${escHtml(label)}</a>`;
+  }
+  return `<button class="btn btn-secondary" style="width:auto;padding:5px 12px;font-size:12px;"
+            onclick="generateDefenseDoc('${escHtml(proposalId)}', '${escHtml(kind)}', this)">${escHtml(label)}</button>`;
+}
+
+/**
+ * Pede o PDF ao servidor e abre numa aba nova.
+ *
+ * window.open é chamado de dentro do handler do clique, mas só depois da
+ * resposta — o que o navegador costuma barrar como popup. Por isso o caminho
+ * principal é mostrar o link para o usuário clicar, e não a abertura
+ * automática: um bloqueio silencioso pareceria um botão quebrado.
+ */
+function generateDefenseDoc(proposalId, kind, btn) {
+  const done = beginBusy(btn, 'Gerando…');
+  google.script.run
+    .withSuccessHandler(res => {
+      done();
+      if (res && res.success) {
+        // Aspas DUPLAS, obrigatoriamente. O que serve a página remove
+        // comentário de linha do JS embutido e não enxerga string de aspa
+        // simples: escrita com aspa simples, esta linha chegava truncada logo
+        // depois de "https:", virava string aberta e derrubava o bloco inteiro.
+        // Ver rationale 7.10. Este comentário evita apóstrofo de propósito.
+        const url = "https://drive.google.com/file/d/" + res.fileId + "/view";
+        btn.outerHTML = `<a class="file-link" target="_blank" href="${url}">📄 Abrir documento gerado</a>`;
+      } else {
+        showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+      }
+    })
+    .withFailureHandler(err => { done(); showMessage('Erro técnico: ' + err.message, true); })
+    .cmdGenerateDefenseDocument(proposalId, kind);
+}
+
+// Simple HTML escape to prevent XSS from data typed into the Sheets
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Applies step-done/step-current/step-locked classes to #flowSteps children.
+// The index comes from the server (payload.phaseIndex / row.phaseIndex), which
+// derives it from TCC_STATUS_META in utils.js — the single status→phase map.
+function renderFlowSteps(currentIndex) {
+  document.querySelectorAll('#flowSteps .flow-step').forEach(el => {
+    const idx = parseInt(el.dataset.step, 10);
+    el.classList.remove('step-done', 'step-current', 'step-locked');
+    if (idx < currentIndex) el.classList.add('step-done');
+    else if (idx === currentIndex) el.classList.add('step-current');
+    else el.classList.add('step-locked');
+  });
+}
+
+// The server always sends dates in the HTML input format ("YYYY-MM-DD" /
+// "YYYY-MM-DDTHH:mm"), which JS parses as local time — these two only turn
+// them into the pt-BR text shown in read-only views.
+function formatDateBr(value) {
+  if (!value) return '—';
+  const d = new Date(String(value) + 'T00:00');
+  return isNaN(d.getTime()) ? String(value) : d.toLocaleDateString('pt-BR');
+}
+
+function formatDefenseDatetime(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  // Sem segundos: a hora da defesa é marcada em minutos
+  return isNaN(d.getTime()) ? String(value) : d.toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+}
+
+// Renders a committee (as returned by _buildCommitteePayload_) read-only.
+// Shared by the Student, Advisor and Incharge views.
+function renderCommitteeSummary(committee) {
+  if (!committee) return '';
+  const members = (committee.members || []).map(m => `
+    <li class="committee-member">
+      <span class="member-name">${escHtml(m.nome)}${m.isPresidente ? ' <em>(presidente)</em>' : ''}</span>
+      <span class="member-meta">${escHtml([m.titulo, m.inst, m.email, m.telefone].filter(Boolean).join(' — '))}</span>
+    </li>
+  `).join('');
+  return `
+    <div class="committee-summary">
+      <h4>Banca Examinadora</h4>
+      <p class="committee-meta">
+        <strong>Título final:</strong> ${escHtml(committee.finalTitle)}<br>
+        <strong>Defesa:</strong> ${escHtml(formatDefenseDatetime(committee.defenseDatetime))}
+        (${escHtml(committee.defenseMode)})
+      </p>
+      <ul class="committee-members">${members}</ul>
+    </div>
+  `;
+}
+</script>

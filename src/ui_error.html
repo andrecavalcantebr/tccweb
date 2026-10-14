@@ -1,0 +1,43 @@
+<!-- FILE: ui_error.html -->
+<!-- DESC: error template page and controller -->
+<!-- AUTH: Andre Cavalcante -->
+<!-- DATE: July, 2026 -->
+<!-- LICENSE: GPL-v3 -->
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <?!= include('ui_styles') ?>
+  </head>
+  <body>
+    <!-- Hidden Assets -->
+    <div style="display:none;"><?!= include('ui_asset_logo1') ?></div>
+
+    <div class="flex-center">
+      <div class="container card error-container">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <img id="logo1" height="120" />
+        </div>
+
+        <div class="error-icon">⚠️</div>
+        <h2 style="color: var(--error-color); margin: 8px 0 12px;"><?= errorMessage ?></h2>
+        <p style="color: var(--secondary-color); font-size: 15px; line-height: 1.5;"><?= errorDetail ?></p>
+
+        <!-- Âncora, não botão com window.top: navegar para fora do iframe do
+             Apps Script exige gesto do usuário, e o clique num link já é
+             exatamente isso (allow-top-navigation-by-user-activation). -->
+        <a href="<?= appUrl ?>" target="_top" class="btn btn-primary"
+           style="display:block; margin-top: 24px; text-decoration: none; text-align: center; box-sizing: border-box;">
+          Voltar para o Início
+        </a>
+      </div>
+    </div>
+
+    <script>
+      // Load image from base64 assets
+      if (typeof AppAssets !== 'undefined') {
+        document.getElementById('logo1').src = AppAssets['logo1'];
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,885 @@
+<!-- FILE: ui_app_dashboard_advisor.html -->
+<!-- DESC: Main view for the Advisor (Orientador) — advisee list + proposal review -->
+<!-- AUTH: Andre Cavalcante -->
+<!-- DATE: July, 2026 -->
+<!-- LICENSE: GPL-v3 -->
+<!DOCTYPE html>
+<html>
+  <head><?!= include('ui_styles') ?></head>
+  <body>
+    <!-- Hidden Assets -->
+    <div style="display:none;"><?!= include('ui_asset_logo4') ?></div>
+    <?!= include('ui_comp_page_header') ?>
+
+    <div class="main-content" style="max-width: 1000px; margin: 0 auto; padding: 20px;">
+
+      <!-- Messages Bar — fora das duas views porque o retorno de uma ação
+           aparece depois de voltar para a lista -->
+      <div id="messagesBar" class="messages-bar"></div>
+
+      <!-- ── List View: Orientandos ─────────────────────────────────── -->
+      <div id="listView">
+        <div class="card" style="padding: 0; overflow: hidden;">
+          <div style="padding: 16px 20px; border-bottom: 1px solid var(--border-color);
+                      display: flex; align-items: center; justify-content: space-between;">
+            <h3 style="margin: 0;">Meus Orientandos</h3>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <button class="btn btn-secondary" id="btnMyProfile" style="width:auto;padding:5px 12px;font-size:12px;display:none;"
+                      onclick="openProfilePanel()">Meus Dados</button>
+              <button class="btn btn-secondary" style="width:auto;padding:5px 12px;font-size:12px;"
+                      onclick="openEnrollmentPanel()">Convite aos Alunos</button>
+            </div>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Aluno(a)</th>
+                <th>Título</th>
+                <th>Status</th>
+                <th style="text-align:center;">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="advisorTableBody">
+              <tr>
+                <td colspan="4" style="padding: 30px; text-align: center; color: var(--secondary-color);">
+                  Carregando…
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Atas de bancas de OUTROS orientadores. Sem esta lista, um professor
+             convidado para uma banca que não é dele — e o convidado externo,
+             que não orienta ninguém — não teria onde assinar: a tabela acima só
+             mostra orientandos. -->
+        <div class="card" id="signaturesCard" style="display:none; margin-top:16px;">
+          <h3 style="margin:0 0 4px;">Atas aguardando a sua assinatura</h3>
+          <p style="font-size:13px;color:var(--secondary-color);margin:0 0 12px;">
+            Bancas em que você é membro. Assinar carimba as notas e o parecer que
+            estão registrados agora.
+          </p>
+          <div id="signaturesBody"></div>
+        </div>
+
+        <!-- "Meus Dados": os campos que a pessoa preencheria no convite, agora
+             editáveis depois dele. São os que saem na Ata e na Folha de
+             Aprovação, e quem sabe como devem aparecer é o dono deles — o
+             mesmo motivo pelo qual o convite pede só o e-mail ao Responsável e
+             deixa o resto para o convidado.
+
+             O e-mail não está aqui: é a chave do cadastro e a identidade que o
+             login, a presidência da banca e a assinatura da Ata conferem. Para
+             trocá-lo é preciso um convite novo, do Responsável. -->
+        <div class="card" id="profilePanel" style="display:none; margin-top:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0;">Meus Dados</h3>
+            <button class="btn btn-secondary" style="width:auto;padding:6px 12px;font-size:12px;"
+                    onclick="closeProfilePanel()">Fechar</button>
+          </div>
+          <p style="font-size:13px;color:var(--secondary-color);margin:8px 0 0;">
+            É assim que o seu nome aparece na Ata da Defesa, na Folha de
+            Aprovação e para os seus orientandos. Corrija à vontade — só o
+            e-mail é fixo.
+          </p>
+          <div class="form-row" style="margin-top:16px;">
+            <div class="input-group">
+              <label for="fProfileName">Nome completo</label>
+              <input type="text" id="fProfileName"
+                     placeholder="Como deve aparecer na Ata e na Folha de Aprovação">
+            </div>
+            <div class="input-group">
+              <label for="fProfileEmail">E-mail</label>
+              <input type="email" id="fProfileEmail" readonly
+                     title="É a chave do seu cadastro e a identidade conferida no login. Só o Responsável muda isso, com um convite novo."
+                     style="background-color:#f1f3f4; color:#5f6368;">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="input-group">
+              <label for="fProfileTitulacao">Titulação</label>
+              <input type="text" id="fProfileTitulacao" placeholder="Dr., Dra., MSc.">
+            </div>
+            <div class="input-group">
+              <label for="fProfileInstituicao">Instituição</label>
+              <input type="text" id="fProfileInstituicao" placeholder="UFAM">
+            </div>
+            <div class="input-group">
+              <label for="fProfilePhone">Telefone</label>
+              <input type="tel" id="fProfilePhone" placeholder="(92) 90000-0000">
+            </div>
+          </div>
+          <div class="actions-bar" style="box-shadow:none;padding:0;margin-top:8px;">
+            <button class="btn btn-primary" onclick="saveProfile(this)">Salvar</button>
+          </div>
+        </div>
+
+        <!-- Convite aos alunos: o mesmo código/link que o Responsável gera na
+             guia "Período Letivo", só que aqui é leitura — regenerar é uma
+             ação de período inteiro, e qualquer Orientador emitindo um código
+             novo invalidaria o de todo mundo. O Responsável também orienta e
+             chega aqui trocando para a visão de Orientador, então o convite
+             não se repete na visão dele. -->
+        <div class="card" id="enrollmentPanel" style="display:none; margin-top:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0;">Convite aos Alunos</h3>
+            <button class="btn btn-secondary" style="width:auto;padding:6px 12px;font-size:12px;"
+                    onclick="closeEnrollmentPanel()">Fechar</button>
+          </div>
+          <div style="margin-top:16px; padding:12px; background:#e8f0fe; border-radius:6px;">
+            <strong>Código de matrícula do período:</strong>
+            <span id="enrollmentCode" style="font-family:monospace; font-size:20px; letter-spacing:3px;"></span>
+            <p style="margin:8px 0 0; font-size:12px; color:var(--secondary-color);">
+              É o que o aluno digita no primeiro acesso. Repasse aos seus
+              orientandos — gerar um código novo é só o Responsável do período.
+            </p>
+            <div style="margin-top:12px; padding-top:12px; border-top:1px solid #c6dafc;">
+              <strong style="font-size:13px;">Link de matrícula para os alunos:</strong>
+              <div style="display:flex; gap:8px; margin-top:6px;">
+                <input type="text" id="enrollmentLink" readonly
+                       style="flex:1; font-size:12px; font-family:monospace; background:#fff;">
+                <button class="btn btn-secondary" style="width:auto;padding:4px 10px;font-size:12px;"
+                        onclick="copyEnrollmentLink('enrollmentLink')">Copiar</button>
+              </div>
+              <p style="margin:6px 0 0; font-size:12px; color:var(--secondary-color);">
+                Leva direto ao cadastro (nome, matrícula e e-mail) com o código já
+                preenchido.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Detail View: Orientando selecionado ────────────────────── -->
+      <div id="detailView" style="display:none;">
+        <button class="btn btn-secondary" style="width:auto;padding:8px 16px;margin-bottom:16px;" onclick="showList()">← Voltar à lista</button>
+
+        <?!= include('ui_comp_flow_steps') ?>
+
+        <div class="card" id="detailCard"></div>
+
+        <div class="actions-bar" id="actionsBar" style="display:none;"></div>
+
+        <!-- Activity log (ui_comp_event_log) -->
+        <div class="card" id="logCard" style="margin-top:16px;"></div>
+
+        <!-- Inline "Retornar para Ajustes" panel (not a true modal — same
+             inline pattern reused by the committee panel below) -->
+        <div class="card" id="returnPanel" style="display:none; margin-top:16px;">
+          <div class="input-group">
+            <label>Justificativa para devolução (o que o aluno deve ajustar)</label>
+            <textarea id="fFeedback" rows="4"></textarea>
+          </div>
+          <div class="actions-bar" style="box-shadow:none;padding:0;margin-top:8px;">
+            <button class="btn btn-secondary" onclick="cancelReturn()">Cancelar</button>
+            <button class="btn btn-primary" onclick="confirmReturn(this)">Confirmar Devolução</button>
+          </div>
+        </div>
+
+        <!-- Inline "Formação da Banca" panel (Fase 3) -->
+        <div class="card" id="committeePanel" style="display:none; margin-top:16px;">
+          <h3 style="margin-top:0;">Formação da Banca</h3>
+          <div class="input-group">
+            <label>Título Final do Trabalho</label>
+            <input type="text" id="fFinalTitle">
+          </div>
+          <div class="form-row">
+            <div class="input-group">
+              <label>Data e Hora da Defesa</label>
+              <input type="datetime-local" id="fDefenseDatetime">
+            </div>
+            <div class="input-group">
+              <label>Modo da Defesa</label>
+              <select id="fDefenseMode">
+                <option value="Presencial">Presencial</option>
+                <option value="Remoto">Remoto</option>
+                <option value="Híbrido">Híbrido</option>
+              </select>
+            </div>
+          </div>
+
+          <label>Membros da Banca (de 3 a 5, incluindo você como presidente)</label>
+          <div id="membersContainer"></div>
+          <button class="btn btn-secondary" id="addMemberBtn"
+                  style="width:auto;padding:6px 12px;font-size:12px;"
+                  onclick="addMemberRow()">+ Adicionar Membro</button>
+
+          <div class="actions-bar" style="box-shadow:none;padding:0;margin-top:16px;">
+            <button class="btn btn-secondary" onclick="cancelCommittee()">Cancelar</button>
+            <button class="btn btn-primary" onclick="submitCommittee(this)">Submeter Banca ao Responsável</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <?!= include('ui_scripts') ?>
+    <?!= include('ui_comp_modal') ?>
+    <?!= include('ui_comp_event_log') ?>
+
+    <!-- Controller for Advisor -->
+    <script>
+      document.getElementById('headerViewDesc').innerText = 'Orientações (Painel do Orientador)';
+
+      // escHtml, renderFlowSteps and renderCommitteeSummary are shared helpers
+      // defined in ui_scripts.html; renderEventLog comes from ui_comp_event_log.
+
+      let rows = [];
+      let pendingSignatures = [];
+      let currentRow = null;
+      let advisor = { name: '', email: '', titulacao: '', instituicao: '',
+                      phone: '', isRegistered: false };
+      let enrollmentCode = '';
+
+      // Ver o comentário equivalente em ui_app_dashboard_student.html: o painel
+      // vem montado dentro da página, e isso elimina uma execução do Apps
+      // Script por abertura.
+      let initialPayload = <?!= typeof initialPayload !== 'undefined' && initialPayload ? initialPayload : 'null' ?>;
+
+      function loadDashboard() {
+        if (initialPayload) {
+          const payload = initialPayload;
+          initialPayload = null;
+          return render(payload);
+        }
+        document.getElementById('advisorTableBody').innerHTML =
+          '<tr><td colspan="4" style="padding:30px;text-align:center;color:var(--secondary-color);">' +
+          'Carregando…</td></tr>';
+        // startLoadWatchdog/clearLoadWatchdog live in ui_scripts.html: the call
+        // can hang without either handler running, and the table would stay on
+        // "Carregando…" forever.
+        startLoadWatchdog(onLoadTimeout);
+        google.script.run
+          .withSuccessHandler(function (data) { clearLoadWatchdog(); render(data); })
+          .withFailureHandler(function (err) { clearLoadWatchdog(); onLoadError(err); })
+          .getAdvisorDashboardData();
+      }
+      loadDashboard();
+
+      // Toda ação devolve o painel já atualizado, montado na mesma execução que
+      // gravou (ver _dashboardPayloadForRole_ em ServiceDashboard.js). Recarregar
+      // numa segunda execução mostrava o estado anterior à ação — a banca
+      // recém-submetida aparecia como se não tivesse sido formada.
+      function applyResult(res) {
+        if (res && res.dashboard) render(res.dashboard);
+        else loadDashboard();
+      }
+
+      function renderPendingSignatures(list) {
+        const card = document.getElementById('signaturesCard');
+        const body = document.getElementById('signaturesBody');
+        if (!card || !body) return;
+
+        if (!list || !list.length) { card.style.display = 'none'; return; }
+        card.style.display = 'block';
+
+        body.innerHTML = list.map((item, i) => `
+          <div style="padding:12px 0;${i ? 'border-top:1px solid var(--border-color);' : ''}">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+              <div>
+                <strong>${escHtml(item.studentName)}</strong>
+                <div style="font-size:13px;color:var(--secondary-color);">${escHtml(item.title)}</div>
+                <div style="font-size:12px;color:var(--secondary-color);">
+                  Defesa: ${escHtml(item.defenseDatetime.replace('T', ' '))}
+                </div>
+              </div>
+              <!-- O índice viaja no onclick, nunca o nome: escHtml não escapa
+                   aspa simples, e um sobrenome com apóstrofo escaparia da
+                   string JS do atributo. -->
+              <button class="btn btn-primary" style="width:auto;padding:6px 14px;font-size:13px;"
+                      onclick="signPending(${i}, this)">Assinar</button>
+            </div>
+            ${renderMinutesSummary(item.defense, { hideGrades: false })}
+          </div>`).join('');
+      }
+
+      function signPending(i, btn) {
+        const item = pendingSignatures[i];
+        if (!item) return;
+        signAsMember(item.proposalId, item.studentName, btn);
+      }
+
+      // ── Convite aos Alunos ────────────────────────────────────────────
+      // enrollmentLinkFor/copyEnrollmentLink vivem em ui_scripts.html: são os
+      // mesmos usados pelo Responsável na guia "Período Letivo".
+      function renderEnrollmentCode() {
+        const codeEl = document.getElementById('enrollmentCode');
+        if (codeEl) codeEl.innerText = enrollmentCode || '—';
+        const link = document.getElementById('enrollmentLink');
+        if (link) link.value = enrollmentLinkFor(enrollmentCode);
+      }
+
+      function openEnrollmentPanel() {
+        const panel = document.getElementById('enrollmentPanel');
+        panel.style.display = 'block';
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      function closeEnrollmentPanel() {
+        document.getElementById('enrollmentPanel').style.display = 'none';
+      }
+
+      // ── Meus Dados ────────────────────────────────────────────────────
+      // O botão só existe para quem tem linha em Teachers: sem ela não há o
+      // que editar, e o servidor recusaria o salvamento de qualquer forma.
+      function renderProfileButton() {
+        const btn = document.getElementById('btnMyProfile');
+        if (btn) btn.style.display = advisor.isRegistered ? 'inline-block' : 'none';
+      }
+
+      function openProfilePanel() {
+        document.getElementById('fProfileName').value        = advisor.name || '';
+        document.getElementById('fProfileEmail').value       = advisor.email || '';
+        document.getElementById('fProfileTitulacao').value   = advisor.titulacao || '';
+        document.getElementById('fProfileInstituicao').value = advisor.instituicao || '';
+        document.getElementById('fProfilePhone').value       = advisor.phone || '';
+        openInlinePanel('profilePanel');
+      }
+
+      function closeProfilePanel() {
+        document.getElementById('profilePanel').style.display = 'none';
+      }
+
+      function saveProfile(btn) {
+        const data = {
+          name:        document.getElementById('fProfileName').value.trim(),
+          titulacao:   document.getElementById('fProfileTitulacao').value.trim(),
+          instituicao: document.getElementById('fProfileInstituicao').value.trim(),
+          phone:       document.getElementById('fProfilePhone').value.trim()
+        };
+        if (!data.name) { showMessage('Informe o seu nome completo.', true); return; }
+
+        const done = beginBusy(btn, 'Salvando…');
+        google.script.run
+          .withSuccessHandler(res => {
+            done();
+            if (res && res.success) {
+              // A cópia local é a mesma que preenche o presidente da banca —
+              // atualizá-la aqui evita que o formulário seguinte ainda traga o
+              // nome antigo.
+              advisor = Object.assign({}, advisor, res.profile);
+              const nameEl = document.querySelector('.user-name');
+              if (nameEl) nameEl.textContent = advisor.name;
+              closeProfilePanel();
+              showMessage(res.msg || 'Dados atualizados.');
+            } else {
+              showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+            }
+          })
+          .withFailureHandler(err => { done(); showMessage('Erro técnico: ' + err.message, true); })
+          .cmdUpdateMyProfile(data);
+      }
+
+      function render(payload) {
+        if (!payload || !payload.success) { return onLoadError((payload && payload.msg) || 'Dados não retornados do servidor.'); }
+        rows = payload.rows || [];
+        advisor = payload.advisor || advisor;
+        pendingSignatures = payload.pendingSignatures || [];
+        enrollmentCode = payload.enrollmentCode || '';
+        renderEnrollmentCode();
+        renderProfileButton();
+
+        // ANTES do retorno antecipado abaixo, de propósito: quem não orienta
+        // ninguém — o convidado de outra instituição é o caso — cai justamente
+        // no "nenhum orientando", e é para ele que a lista de assinaturas
+        // existe. Renderizada depois, ela nunca apareceria para quem mais
+        // precisa dela.
+        renderPendingSignatures(pendingSignatures);
+
+        const tbody = document.getElementById('advisorTableBody');
+        if (rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" style="padding:30px;text-align:center;color:var(--secondary-color);">' +
+            (pendingSignatures.length
+              ? 'Você não orienta ninguém neste período — veja abaixo as atas que aguardam a sua assinatura.'
+              : 'Nenhum orientando no momento.') + '</td></tr>';
+          return;
+        }
+        tbody.innerHTML = rows.map(row => `
+          <tr>
+            <td>${escHtml(row.studentName)}</td>
+            <td style="max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
+                title="${escHtml(row.Title)}">${escHtml(row.Title)}</td>
+            <td><span class="badge ${escHtml(row.badgeClass)}">${escHtml(row.Status)}</span></td>
+            <td style="text-align:center;">
+              <button class="btn btn-primary" style="width:auto;padding:5px 12px;font-size:12px;"
+                onclick="showDetail('${escHtml(row.ProposalId)}')">Ver Detalhes</button>
+            </td>
+          </tr>
+        `).join('');
+      }
+
+      function showDetail(proposalId) {
+        currentRow = rows.find(r => r.ProposalId === proposalId);
+        if (!currentRow) return;
+
+        document.getElementById('listView').style.display = 'none';
+        document.getElementById('detailView').style.display = 'block';
+        document.getElementById('returnPanel').style.display = 'none';
+        document.getElementById('committeePanel').style.display = 'none';
+
+        renderFlowSteps(currentRow.phaseIndex);
+        renderMessage();
+        renderDetailCard();
+        renderActions();
+        renderEventLog(document.getElementById('logCard'), currentRow.events, {
+          proposalId: currentRow.ProposalId,
+          canComment: true,
+          // applyResult só redesenha a lista; reabrir o detalhe traz o log novo
+          onApplied: res => { applyResult(res); showDetail(proposalId); }
+        });
+      }
+
+      function showList() {
+        document.getElementById('detailView').style.display = 'none';
+        document.getElementById('listView').style.display = 'block';
+        // A mensagem de contexto é do detalhe; quem fala na lista é showMessage.
+        document.getElementById('messagesBar').style.display = 'none';
+      }
+
+      // Retorno das ações e avisos de validação: mesma barra de mensagens do
+      // Painel do Aluno, em vez de um diálogo que exige clique em OK.
+      function showMessage(msg, isError) {
+        const bar = document.getElementById('messagesBar');
+        bar.innerText = msg;
+        bar.classList.toggle('is-error', !!isError);
+        bar.style.display = 'block';
+        setTimeout(() => {
+          if (document.getElementById('detailView').style.display !== 'none' && currentRow) renderMessage();
+          else bar.style.display = 'none';
+        }, 5000);
+      }
+
+      function renderMessage() {
+        const bar = document.getElementById('messagesBar');
+        let msg = '';
+        switch (currentRow.Status) {
+          case 'Proposta Retornada Para Ajustes':
+            msg = 'Você devolveu esta proposta (correção nº ' + (currentRow.Iterations || 1) + '). Aguardando reenvio do aluno.';
+            break;
+          case 'Proposta Aprovada':
+            msg = 'Proposta aprovada. Aguardando homologação do Responsável.';
+            break;
+          case 'Em Desenvolvimento':
+            msg = 'Aluno na fase de Desenvolvimento do TCC, sob sua orientação.';
+            break;
+          case 'TCC Concluído':
+            msg = 'TCC concluído pelo aluno. Monte e submeta a banca examinadora.';
+            break;
+          case 'Banca Submetida':
+            msg = 'Banca submetida. Aguardando homologação do Responsável (ainda é possível corrigir os dados).';
+            break;
+          case 'Banca Homologada':
+            msg = 'Banca homologada. A fase de Defesa ainda está em desenvolvimento no sistema.';
+            break;
+        }
+        bar.classList.remove('is-error'); // pode ter sobrado de um showMessage
+        if (msg) { bar.innerText = msg; bar.style.display = 'block'; }
+        else { bar.style.display = 'none'; }
+      }
+
+      function renderDetailCard() {
+        const d = currentRow;
+        document.getElementById('detailCard').innerHTML = `
+          <div class="input-group">
+            <label>Título do Projeto</label>
+            <input type="text" value="${escHtml(d.Title)}" disabled>
+          </div>
+          <div class="form-row">
+            <div class="input-group">
+              <label>Matrícula</label>
+              <input type="text" value="${escHtml(d.StudentId)}" disabled>
+            </div>
+            <div class="input-group">
+              <label>Telefone do Aluno</label>
+              <input type="text" value="${escHtml(d.StudentPhone)}" disabled>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="input-group">
+              <label>Data Prevista da Defesa</label>
+              <input type="date" value="${escHtml(d.DefensePrediction)}" disabled>
+            </div>
+          </div>
+          ${proposalDocLinkHtml(d.DocId)}
+          ${workFileLinkHtml(d.WorkFileId)}
+          ${renderCommitteeSummary(d.committee)}
+          ${minutesHtml(d)}
+        `;
+      }
+
+      /**
+       * A Ata: formulário enquanto o Orientador ainda pode lançar, resumo em
+       * leitura depois de ele assinar.
+       *
+       * A fronteira é canRecordVerdict, e não a existência da Ata: assinada,
+       * ela não pode mais mudar — as notas estão dentro do que cada assinatura
+       * carimba, e editá-las invalidaria todas.
+       */
+      function minutesHtml(d) {
+        if (!d.defense) return '';
+        if (!d.permissions.canRecordVerdict) {
+          return renderMinutesSummary(d.defense) +
+            (d.defense.studentAgreedAt
+              ? '<div style="margin-top:12px;">' +
+                defenseDocButtonHtml(d.ProposalId, 'ata', 'Ata da Defesa (PDF)', d.defense.minutesPdfId) +
+                '<p class="file-link-hint">Serve como comprovante de participação na banca.</p></div>'
+              : '');
+        }
+
+        const linhas = d.defense.membros.map((m, i) => `
+          <tr>
+            <td>${escHtml(m.nome)}${m.isPresidente ? ' <span class="badge badge-neutral">presidente</span>' : ''}</td>
+            <td style="font-size:12px;">${escHtml(m.titulo || '—')} · ${escHtml(m.inst || '—')}</td>
+            <td style="width:110px;">
+              <input type="number" class="grade-input" data-email="${escHtml(m.email)}"
+                     min="0" max="10" step="0.1" value="${escHtml(m.nota)}"
+                     style="width:100%;padding:6px;">
+            </td>
+          </tr>`).join('');
+
+        const opcoes = ['Aprovado', 'Aprovado com Restrições', 'Reprovado'].map(v =>
+          `<option value="${escHtml(v)}" ${d.defense.parecer === v ? 'selected' : ''}>${escHtml(v)}</option>`).join('');
+
+        return `
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-color);">
+            <h4 style="margin:0 0 10px;">Ata da Defesa</h4>
+            <div style="margin-bottom:12px;">
+              ${defenseDocButtonHtml(d.ProposalId, 'ata-papel', 'Ficha de apoio à defesa (PDF)', '')}
+              <p class="file-link-hint">Imprima antes da defesa para anotar as notas. Depois, transcreva os dados abaixo e libere as assinaturas.</p>
+            </div>
+            <table class="data-table">
+              <thead><tr><th>Membro</th><th>Titulação · Instituição</th><th>Nota (0–10)</th></tr></thead>
+              <tbody>${linhas}</tbody>
+            </table>
+            <div class="input-group" style="margin-top:12px;">
+              <label for="fParecer">Parecer da banca</label>
+              <select id="fParecer"><option value="">Selecione…</option>${opcoes}</select>
+            </div>
+            <div class="input-group">
+              <label for="fObservacoes">Observações da banca</label>
+              <textarea id="fObservacoes" rows="3">${escHtml(d.defense.observacoes)}</textarea>
+            </div>
+            <p class="file-link-hint">
+              Salvar guarda o que já foi lançado e pode ser feito quantas vezes precisar.
+              Assinar fecha a Ata: as notas passam a fazer parte do que cada assinatura
+              carimba e não podem mais ser alteradas.
+            </p>
+          </div>`;
+      }
+
+      /** Lê o formulário da Ata. */
+      function collectMinutes() {
+        const notas = {};
+        document.querySelectorAll('.grade-input').forEach(el => {
+          notas[el.dataset.email] = el.value;
+        });
+        return {
+          notas: notas,
+          parecer: (document.getElementById('fParecer') || {}).value || '',
+          observacoes: (document.getElementById('fObservacoes') || {}).value || ''
+        };
+      }
+
+      function renderActions() {
+        const bar = document.getElementById('actionsBar');
+        const p = currentRow.permissions;
+        const buttons = [];
+
+        if (p.canApprove) {
+          buttons.push('<button class="btn btn-primary" onclick="approveProposal(this)">Aprovar</button>');
+        }
+        if (p.canReturn) {
+          buttons.push('<button class="btn btn-secondary" onclick="openReturnPanel()">Retornar para Ajustes</button>');
+        }
+        if (p.canEditCommittee) {
+          buttons.push(`<button class="btn btn-primary" onclick="openCommitteePanel()">${
+            currentRow.committee ? 'Editar Banca' : 'Formar Banca'}</button>`);
+        }
+        if (p.canCreateMinutes) {
+          buttons.push('<button class="btn btn-primary" onclick="createMinutes(this)">Gerar Ata da Defesa</button>');
+        }
+        if (p.canRecordVerdict) {
+          buttons.push('<button class="btn btn-secondary" onclick="saveMinutes(this)">Salvar Ata</button>');
+          buttons.push('<button class="btn btn-primary" onclick="signMinutes(this)">Assinar e liberar assinaturas</button>');
+        }
+
+        if (buttons.length === 0) {
+          bar.style.display = 'none';
+        } else {
+          bar.innerHTML = buttons.join('');
+          bar.style.display = 'flex';
+        }
+      }
+
+      function createMinutes(btn) {
+        appConfirm('Gerar a Ata da defesa de ' + currentRow.studentName + '?\n\n' +
+                   'A composição da banca fica congelada a partir daqui.').then(ok => {
+          if (!ok) return;
+          runCommand(btn, 'Gerando…', 'Ata gerada. Você pode imprimir a via em papel ou lançar as notas e o parecer.',
+            r => r.cmdCreateMinutes(currentRow.ProposalId));
+        });
+      }
+
+      function saveMinutes(btn) {
+        runCommand(btn, 'Salvando…', 'Ata salva.',
+          r => r.cmdSaveMinutes(currentRow.ProposalId, collectMinutes()));
+      }
+
+      function signMinutes(btn) {
+        appConfirm('Assinar a Ata de ' + currentRow.studentName + '?\n\n' +
+                   'As notas e o parecer não poderão mais ser alterados, e os demais ' +
+                   'membros da banca serão avisados para assinar.').then(ok => {
+          if (!ok) return;
+          runCommand(btn, 'Assinando…', 'Ata assinada. A banca foi notificada.',
+            r => r.cmdSignMinutesAsAdvisor(currentRow.ProposalId, collectMinutes()));
+        });
+      }
+
+      /** Assina uma ata de OUTRO orientador, em que esta pessoa é membro. */
+      function signAsMember(proposalId, nome, btn) {
+        appConfirm('Assinar a Ata de ' + nome + ' como membro da banca?').then(ok => {
+          if (!ok) return;
+          runCommand(btn, 'Assinando…', 'Ata assinada.',
+            r => r.cmdSignMinutes(proposalId));
+        });
+      }
+
+      /**
+       * Envelope comum dos comandos: ocupa o botão, aplica o painel de volta e
+       * mostra o erro na barra. Os cinco comandos da Fase 4 fazem exatamente
+       * isto, e repeti-lo cinco vezes só multiplicaria os lugares de errar.
+       */
+      function runCommand(btn, busyLabel, okMessage, invoke) {
+        const done = beginBusy(btn, busyLabel);
+        invoke(google.script.run
+          .withSuccessHandler(res => {
+            done();
+            if (res && res.success) { showMessage(okMessage); applyResult(res); }
+            else showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+          })
+          .withFailureHandler(err => { done(); showMessage('Erro técnico: ' + err.message, true); }));
+      }
+
+      function approveProposal(btn) {
+        appConfirm('Confirmar aprovação da proposta de ' + currentRow.studentName + '?').then(ok => {
+          if (!ok) return;
+          const done = beginBusy(btn, 'Aprovando…');
+          google.script.run
+            .withSuccessHandler(res => {
+              done();
+              if (res && res.success) { showList(); showMessage('Proposta aprovada com sucesso!'); applyResult(res); }
+              else showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+            })
+            .withFailureHandler(err => { done(); appAlert('Erro técnico: ' + err.message); })
+            .cmdApproveProposal(currentRow.ProposalId);
+        });
+      }
+
+      function openReturnPanel() {
+        document.getElementById('fFeedback').value = '';
+        openInlinePanel('returnPanel');
+      }
+
+      // Os painéis inline nascem abaixo da barra de ações, que costuma estar no
+      // rodapé da janela: sem rolar até eles, abrir parece não fazer nada — o
+      // único sinal era a barra de rolagem encolhendo.
+      // block:'start' e não 'nearest': 'nearest' rola o mínimo, e um painel
+      // curto (o de devolução) pararia colado na borda de baixo, quase sem
+      // movimento. O cabeçalho fixo é compensado pelo scroll-margin-top de
+      // .card (ui_styles.html).
+      function openInlinePanel(id) {
+        const panel = document.getElementById(id);
+        panel.style.display = 'block';
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      function cancelReturn() {
+        document.getElementById('returnPanel').style.display = 'none';
+      }
+
+      function confirmReturn(btn) {
+        const feedback = document.getElementById('fFeedback').value.trim();
+        if (!feedback) { showMessage('Descreva o que o aluno deve ajustar.', true); return; }
+        // Sem appConfirm aqui: o painel de devolução, com a justificativa
+        // escrita, já é a confirmação da ação.
+        const done = beginBusy(btn, 'Devolvendo…');
+        google.script.run
+          .withSuccessHandler(res => {
+            done();
+            if (res && res.success) { showList(); showMessage('Proposta devolvida ao aluno.'); applyResult(res); }
+            else showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+          })
+          .withFailureHandler(err => { done(); appAlert('Erro técnico: ' + err.message); })
+          .cmdReturnProposal(currentRow.ProposalId, feedback);
+      }
+
+      // ── Formação da Banca (Fase 3) ───────────────────────────────────
+      // The president is always the advisor (specs.md), so row 0 cannot be
+      // removed and its e-mail is fixed — _validateMembers recusa uma banca
+      // cujo presidente não seja o Orientador da proposta, e é o e-mail que
+      // amarra isso.
+      //
+      // O NOME, não: ele é só texto que vai para a Ata e para a Folha de
+      // Aprovação, o servidor não o confere contra nada. Travá-lo deixava o
+      // Orientador sem saída quando o cadastro trazia um nome ruim — o nome
+      // fabricado a partir do e-mail (ensureTeacher) é o caso comum, e não
+      // havia onde corrigir.
+      const MIN_MEMBERS = 3;
+      const MAX_MEMBERS = 5;
+
+      function openCommitteePanel() {
+        const c = currentRow.committee;
+        document.getElementById('fFinalTitle').value = c ? c.finalTitle : (currentRow.Title || '');
+        document.getElementById('fDefenseDatetime').value = c ? c.defenseDatetime : '';
+        document.getElementById('fDefenseMode').value = c ? c.defenseMode : 'Presencial';
+
+        document.getElementById('membersContainer').innerHTML = '';
+        const existing = (c && c.members) ? c.members : [];
+        // Banca nova: a linha do presidente nasce com o cadastro INTEIRO do
+        // Orientador, não só nome e e-mail. Titulação e instituição já estavam
+        // gravadas em Teachers; pedi-las de novo aqui era redigitar o que o
+        // sistema tem — e o que ele redigitasse diferente é o que sairia na
+        // Ata. Para corrigi-las de vez, "Meus Dados".
+        const president = existing.find(m => m.isPresidente) || {
+          nome:  advisor.name,
+          email: advisor.email,
+          titulo: advisor.titulacao,
+          inst:   advisor.instituicao,
+          telefone: advisor.phone
+        };
+        addMemberRow(president);
+        existing.filter(m => !m.isPresidente).forEach(m => addMemberRow(m));
+        while (countMemberRows() < MIN_MEMBERS) addMemberRow();
+
+        openInlinePanel('committeePanel');
+      }
+
+      function cancelCommittee() {
+        document.getElementById('committeePanel').style.display = 'none';
+      }
+
+      function countMemberRows() {
+        return document.querySelectorAll('#membersContainer .member-editor').length;
+      }
+
+      function addMemberRow(member) {
+        const container = document.getElementById('membersContainer');
+        const index = countMemberRows();
+        if (index >= MAX_MEMBERS) { showMessage('A banca pode ter no máximo ' + MAX_MEMBERS + ' membros.', true); return; }
+
+        const m = member || {};
+        const isPresident = index === 0;
+        const div = document.createElement('div');
+        div.className = 'member-editor';
+        div.innerHTML = `
+          <div class="member-editor-head">
+            <span class="member-editor-title">${isPresident ? 'Presidente (Orientador)' : 'Membro ' + (index + 1)}</span>
+            ${isPresident ? '' : '<button type="button" class="btn-link" onclick="removeMemberRow(this)">remover</button>'}
+          </div>
+          <div class="form-row">
+            <div class="input-group">
+              <label>Nome</label>
+              <input type="text" class="m-nome" value="${escHtml(m.nome)}">
+            </div>
+            <div class="input-group">
+              <label>Titulação</label>
+              <input type="text" class="m-titulo" value="${escHtml(m.titulo)}" placeholder="Ex.: Dr., Msc.">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="input-group">
+              <label>Instituição</label>
+              <input type="text" class="m-inst" value="${escHtml(m.inst)}">
+            </div>
+            <div class="input-group">
+              <label>E-mail</label>
+              <input type="email" class="m-email" value="${escHtml(m.email)}"
+                     ${isPresident ? 'readonly title="O presidente da banca é o Orientador do aluno — o servidor recusa outro e-mail aqui." style="background-color: #f1f3f4; color: #5f6368;"' : ''}>
+            </div>
+          </div>
+          <div class="input-group">
+            <label>Telefone</label>
+            <input type="tel" class="m-telefone" value="${escHtml(m.telefone)}">
+          </div>
+        `;
+        container.appendChild(div);
+        updateAddMemberBtn();
+      }
+
+      function removeMemberRow(btn) {
+        if (countMemberRows() <= MIN_MEMBERS) {
+          showMessage('A banca deve ter no mínimo ' + MIN_MEMBERS + ' membros.', true);
+          return;
+        }
+        btn.closest('.member-editor').remove();
+        renumberMemberRows();
+        updateAddMemberBtn();
+      }
+
+      function renumberMemberRows() {
+        document.querySelectorAll('#membersContainer .member-editor').forEach((el, i) => {
+          if (i === 0) return; // president label is fixed
+          el.querySelector('.member-editor-title').innerText = 'Membro ' + (i + 1);
+        });
+      }
+
+      function updateAddMemberBtn() {
+        document.getElementById('addMemberBtn').style.display =
+          countMemberRows() >= MAX_MEMBERS ? 'none' : 'inline-block';
+      }
+
+      function collectCommitteeData() {
+        const members = Array.prototype.map.call(
+          document.querySelectorAll('#membersContainer .member-editor'),
+          (el, i) => ({
+            nome:     el.querySelector('.m-nome').value.trim(),
+            titulo:   el.querySelector('.m-titulo').value.trim(),
+            inst:     el.querySelector('.m-inst').value.trim(),
+            email:    el.querySelector('.m-email').value.trim(),
+            telefone: el.querySelector('.m-telefone').value.trim(),
+            isPresidente: i === 0
+          })
+        );
+        return {
+          finalTitle:      document.getElementById('fFinalTitle').value.trim(),
+          defenseDatetime: document.getElementById('fDefenseDatetime').value,
+          defenseMode:     document.getElementById('fDefenseMode').value,
+          members:         members
+        };
+      }
+
+      function submitCommittee(btn) {
+        const data = collectCommitteeData();
+        // Server-side validation is authoritative (ServiceCommittee); these
+        // checks only avoid a needless round-trip.
+        if (!data.finalTitle) { showMessage('Informe o título final do trabalho.', true); return; }
+        if (!data.defenseDatetime) { showMessage('Informe a data e a hora da defesa.', true); return; }
+        if (data.members.length < MIN_MEMBERS) { showMessage('A banca deve ter no mínimo ' + MIN_MEMBERS + ' membros.', true); return; }
+
+        appConfirm('Submeter esta banca ao Responsável para homologação?').then(ok => {
+          if (!ok) return;
+          const done = beginBusy(btn, 'Submetendo…');
+          google.script.run
+            .withSuccessHandler(res => {
+              done();
+              if (res && res.success) { showList(); showMessage('Banca submetida com sucesso!'); applyResult(res); }
+              else showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+            })
+            .withFailureHandler(err => { done(); appAlert('Erro técnico: ' + err.message); })
+            .cmdSubmitCommittee(currentRow.ProposalId, data);
+        });
+      }
+
+      function onLoadError(err) {
+        document.getElementById('advisorTableBody').innerHTML =
+          '<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--error-color);">' +
+          'Erro ao carregar dados: ' + escHtml(String(err)) + '</td></tr>';
+      }
+
+      function onLoadTimeout() {
+        document.getElementById('advisorTableBody').innerHTML =
+          '<tr><td colspan="4" style="padding:20px;">' + loadTimeoutHtml() + '</td></tr>';
+      }
+    </script>
+  </body>
+</html>

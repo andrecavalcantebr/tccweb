@@ -1,0 +1,120 @@
+<!-- FILE: ui_app_login.html -->
+<!-- DESC: login page and controller -->
+<!-- AUTH: Andre Cavalcante -->
+<!-- DATE: July, 2026 -->
+<!-- LICENSE: GPL-v3 -->
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <?!= include('ui_styles') ?>
+  </head>
+  <body>
+    <!-- Hidden Assets -->
+    <div style="display:none;"><?!= include('ui_asset_logo1') ?></div>
+
+    <div class="flex-center">
+      <div class="container card">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <img id="logo1" height="120" />
+      </div>
+      <h2 style="text-align: center; color: var(--primary-color);">Login Acadêmico</h2>
+
+            <!-- POST (doPost em main.js, mesmo roteador do doGet): com GET, o
+                 nome e o e-mail digitados ficavam na barra de endereços e no
+                 histórico do navegador, sobrevivendo à sessão. target="_top"
+                 escapa do iframe do Apps Script — permitido porque o submit é
+                 clique do usuário (allow-top-navigation-by-user-activation). -->
+            <form id="loginForm" action="<?= ScriptApp.getService().getUrl() ?>" method="POST" target="_top">
+        <input type="hidden" name="page" value="validate_login">
+        <!-- One-time token: recarregar a resposta do POST oferece reenviar o
+             formulário, e o usuário confirma sem pensar. O token faz desse
+             reenvio um replay, não um login novo, para que o timeout de sessão
+             possa ser alcançado (ver _consumeLoginNonce_ em main.js) -->
+        <input type="hidden" name="nonce" value="<?= typeof loginNonce !== 'undefined' ? loginNonce : '' ?>">
+        <div class="input-group">
+          <label for="userEmail">E-mail</label>
+          <? if (userEmail) { ?>
+            <!-- Google resolveu a conta (domínio ufam.edu.br): identidade já
+                 provada, nada mais é pedido. O campo é somente leitura porque
+                 aceitar um e-mail digitado aqui deixaria qualquer um se
+                 declarar qualquer pessoa. -->
+            <input type="email" id="userEmail" name="email" value="<?= userEmail ?>" readonly style="background-color: #f1f3f4; color: #5f6368;">
+          <? } else { ?>
+            <!-- Google não identifica contas fora do domínio. Aqui o e-mail é
+                 uma alegação, e só a senha (membro externo de banca) a
+                 sustenta — ver features/login.md. -->
+            <input type="email" id="userEmail" name="email" required placeholder="seu-email@exemplo.com">
+          <? } ?>
+        </div>
+
+        <? if (!userEmail) { ?>
+        <div class="input-group">
+          <label for="userPassword">Senha</label>
+          <input type="password" id="userPassword" name="password" required placeholder="Senha recebida por e-mail">
+          <small style="color: var(--secondary-color);">
+            É aluno ou professor da UFAM? Entre no navegador com a sua conta
+            <strong>@ufam.edu.br</strong> — nesse caso não há senha nenhuma a digitar.
+          </small>
+        </div>
+        <? } ?>
+
+        <div class="input-group">
+          <label for="userName">Seu Nome Completo</label>
+          <input type="text" id="userName" name="name" required placeholder="Digite seu nome">
+        </div>
+
+        <button type="submit" id="btnLogin" class="btn btn-primary" style="margin-top: 10px;">Acessar o TCC-WebApp</button>
+      </form>
+
+      <p style="text-align:center; margin-top: 18px;">
+        <a href="<?= ScriptApp.getService().getUrl() ?>?page=enrollment" target="_top">
+          Sou aluno e tenho o código do período letivo
+        </a>
+      </p>
+
+      <!-- Erros de login são exibidos pela página de erro do servidor
+           (renderError em main.js), já que o formulário navega a janela de
+           topo — não há retorno assíncrono para mostrar aqui. -->
+    </div>
+
+    <?!= include('ui_scripts') ?>
+
+    <!-- CONTROLLER DA PÁGINA (Client-side Logic) -->
+    <script>
+      // Load image from base64 assets
+      if (typeof AppAssets !== 'undefined') {
+        document.getElementById('logo1').src = AppAssets['logo1'];
+      }
+
+      const emailField = document.getElementById('userEmail');
+      const cachedName = localStorage.getItem("tcc_last_user_name");
+
+      // O e-mail digitado NÃO é mais guardado no navegador: ele passou a valer
+      // apenas acompanhado de senha, e um endereço pré-preenchido só ajudaria
+      // quem senta na máquina de outra pessoa. O nome continua em cache, porque
+      // é só rótulo de exibição.
+      const email = emailField.value;
+
+      if (cachedName) {
+        document.getElementById('userName').value = cachedName;
+      } else if (email && email.includes('@')) {
+        let alias = email.split('@')[0];
+        alias = alias.replace(/\./g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        document.getElementById('userName').value = alias;
+      }
+
+      document.getElementById('loginForm').addEventListener('submit', function(e) {
+        const name = document.getElementById('userName').value;
+        localStorage.setItem("tcc_last_user_name", name);
+
+        const btn = document.getElementById('btnLogin');
+        // Não usar btn.disabled = true; pois pode impedir o browser de submeter o form em alguns casos.
+        btn.innerText = "Acessando o sistema...";
+
+        // Deixamos submeter sincronamente para target=top escapando o iframe Security Sandbox:
+        // NÃO TEM e.preventDefault()
+      });
+    </script>
+  </body>
+</html>

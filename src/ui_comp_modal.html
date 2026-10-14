@@ -1,0 +1,99 @@
+<!-- FILE: ui_comp_modal.html -->
+<!-- DESC: Themed confirm/alert dialog, replacing the browser's native ones -->
+<!-- AUTH: Andre Cavalcante -->
+<!-- DATE: August, 2026 -->
+<!-- LICENSE: GPL-v3 -->
+
+<div class="modal-overlay" id="appModalOverlay" style="display:none;">
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="appModalTitle">
+    <h3 class="modal-title" id="appModalTitle"></h3>
+    <p class="modal-message" id="appModalMessage"></p>
+    <div class="actions-bar modal-actions" id="appModalActions"></div>
+  </div>
+</div>
+
+<script>
+/**
+ * appConfirm / appAlert — themed stand-ins for the browser's confirm() and
+ * alert(). The native ones are rendered by the browser chrome, so inside the
+ * Apps Script iframe they announce the raw googleusercontent.com host ("Uma
+ * página incorporada em n-wqfdy…-script.googleusercontent.com diz") before the
+ * message, which is both ugly and alarming for the user.
+ *
+ * Both return a Promise (confirm resolves true/false; alert resolves when
+ * dismissed), because a DOM dialog can't block the thread the way the native
+ * one does — every call site becomes `.then(...)`.
+ *
+ * Deliberately used only where the user has to decide (confirmations) or where
+ * something broke unexpectedly (technical errors). Success feedback and
+ * validation hints go to the messages bar of each dashboard: they carry no
+ * decision, and an extra click on OK is pure friction.
+ */
+function appConfirm(message, options) {
+  const o = options || {};
+  return _openAppModal({
+    title:        o.title || 'Confirmação',
+    message:      message,
+    confirmLabel: o.confirmLabel || 'Confirmar',
+    cancelLabel:  o.cancelLabel || 'Cancelar'
+  });
+}
+
+function appAlert(message, options) {
+  const o = options || {};
+  return _openAppModal({
+    title:        o.title || 'Aviso',
+    message:      message,
+    confirmLabel: o.confirmLabel || 'OK',
+    cancelLabel:  null            // single button: nothing to decline
+  });
+}
+
+function _openAppModal(opts) {
+  const overlay  = document.getElementById('appModalOverlay');
+  const actions  = document.getElementById('appModalActions');
+  document.getElementById('appModalTitle').innerText   = opts.title;
+  document.getElementById('appModalMessage').innerText = opts.message;
+
+  // The previously focused element is restored on close, so keyboard users
+  // land back where they were (typically the button that opened the dialog).
+  const previousFocus = document.activeElement;
+
+  return new Promise(function (resolve) {
+    function close(result) {
+      document.removeEventListener('keydown', onKeyDown, true);
+      overlay.style.display = 'none';
+      actions.innerHTML = '';
+      if (previousFocus && previousFocus.focus) previousFocus.focus();
+      resolve(result);
+    }
+
+    function onKeyDown(ev) {
+      if (ev.key === 'Escape') { ev.preventDefault(); close(false); }
+      else if (ev.key === 'Enter') { ev.preventDefault(); close(true); }
+    }
+
+    actions.innerHTML = '';
+    if (opts.cancelLabel) {
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn btn-secondary';
+      cancelBtn.innerText = opts.cancelLabel;
+      cancelBtn.onclick = function () { close(false); };
+      actions.appendChild(cancelBtn);
+    }
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'btn btn-primary';
+    confirmBtn.innerText = opts.confirmLabel;
+    confirmBtn.onclick = function () { close(true); };
+    actions.appendChild(confirmBtn);
+
+    // Clicking the backdrop is the same as declining — and, on an alert, the
+    // same as acknowledging, since there is nothing to decline.
+    overlay.onclick = function (ev) { if (ev.target === overlay) close(!opts.cancelLabel); };
+
+    document.addEventListener('keydown', onKeyDown, true);
+    overlay.style.display = 'flex';
+    confirmBtn.focus();
+  });
+}
+</script>

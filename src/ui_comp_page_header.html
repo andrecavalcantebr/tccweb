@@ -1,0 +1,127 @@
+<!-- FILE: ui_comp_page_header.html -->
+<!-- DESC: Main Header Component -->
+<!-- AUTH: Andre Cavalcante -->
+<!-- DATE: July, 2026 -->
+<!-- LICENSE: GPL-v3 -->
+
+<!-- appUrl e semester viajam em ATRIBUTO, não interpolados numa string JS.
+     O escape do scriptlet de impressão é contextual e, quando se perde,
+     devolve a string já entre aspas — dentro das aspas que o código tinha,
+     sobrava uma string vazia seguida do resto solto, e o bloco inteiro
+     deixava de compilar. Em atributo HTML o contexto é inequívoco.
+     Ver rationale 7.11. -->
+<header class="page-header"
+        data-app-url="<?= ScriptApp.getService().getUrl() ?>"
+        data-semester="<?= typeof currentSemester !== 'undefined' ? currentSemester : '' ?>">
+  <div class="header-left">
+    <img id="header-logo" alt="TCC WebApp Logo" height="40" />
+  </div>
+  <div class="header-center">
+    <span class="header-view-desc" id="headerViewDesc">Carregando...</span>
+  </div>
+  <div class="header-right">
+    <!-- Botão, e não link solto ao lado do logo: em texto de 12px ninguém o
+         achava — nem quem usa o sistema há meses. -->
+    <a class="btn btn-secondary header-verify-btn" href="<?= ScriptApp.getService().getUrl() ?>?page=verify"
+       target="_top" title="Conferir a chave de validação de uma Ata ou Folha de Aprovação">🔍 Verificar documento</a>
+    <div class="user-profile">
+      <span class="user-name"><?= userName ?></span>
+      <span class="user-email"><?= userEmail ?></span>
+      <!-- Período e papel na MESMA linha: são dois rótulos curtos, e empilhados
+           somavam uma quarta linha que estourava a altura do cabeçalho fixo. -->
+      <div class="user-context">
+      <!-- Seletor de período: aparece para qualquer papel quando a pessoa
+           participa de mais de um período em andamento — professor com duas
+           turmas, ou aluno que recomeçou o TCC num período novo enquanto o
+           anterior ainda não foi encerrado. -->
+      <? if (typeof availableSemesters !== 'undefined' && availableSemesters.length > 1) { ?>
+        <select class="user-semester-select" onchange="changeUserSemester(this.value)">
+          <? for (var i = 0; i < availableSemesters.length; i++) { ?>
+            <option value="<?= availableSemesters[i].name ?>" <?= availableSemesters[i].isCurrent ? 'selected' : '' ?>><?= availableSemesters[i].name ?></option>
+          <? } ?>
+        </select>
+      <? } else if (typeof currentSemester !== 'undefined' && currentSemester) { ?>
+        <span class="user-semester"><?= currentSemester ?></span>
+      <? } ?>
+      <? if (typeof availableRoles !== 'undefined' && availableRoles.length > 1) { ?>
+        <select class="user-role-select" onchange="changeUserRole(this.value)">
+          <? for (var i = 0; i < availableRoles.length; i++) { ?>
+            <option value="<?= availableRoles[i] ?>" <?= availableRoles[i] === userRole ? 'selected' : '' ?>><?= availableRoles[i] ?></option>
+          <? } ?>
+        </select>
+      <? } else { ?>
+        <span class="user-role"><?= typeof userRole !== 'undefined' ? userRole : '' ?></span>
+      <? } ?>
+      </div>
+    </div>
+  </div>
+</header>
+<style>
+.page-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* Altura mínima, não fixa: o bloco do usuário cresceu (nome, e-mail, período
+     e papel) e passou a estourar os 60px, encostando na borda amarela. */
+  min-height: 60px;
+  box-sizing: border-box;
+  background-color: var(--surface-color);
+  border-bottom: 2px solid #fbbc04; /* Yellow border for Identity */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 20px;
+  gap: 12px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  z-index: 1000;
+}
+.header-left { max-width: 30%; flex: 1; }
+.header-right { max-width: 40%; flex: 1; }
+.header-center { flex: 2; text-align: center; }
+.header-left { display: flex; align-items: center; gap: 10px; }
+.header-title { font-weight: 600; color: var(--primary-color); font-size: 18px;}
+.header-view-desc { font-weight: bold; color: var(--secondary-color); font-size: 20px; }
+.header-right { display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
+.header-verify-btn { width: auto; padding: 6px 12px; font-size: 13px; white-space: nowrap; text-decoration: none; display: inline-block; }
+.user-profile { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.user-context { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.user-name  { font-size: 13px; color: var(--text-color); font-weight: 600; line-height: 1.2; }
+.user-email { font-size: 11px; color: var(--secondary-color); line-height: 1.2; }
+.user-role  { font-size: 10px; color: var(--primary-color); text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; }
+.user-semester { font-size: 10px; color: var(--secondary-color); font-weight: 600; letter-spacing: 0.5px; }
+.user-semester-select { font-size: 10px; color: var(--secondary-color); font-weight: bold; letter-spacing: 0.5px; border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 4px; background: transparent; cursor: pointer; outline: none; }
+.user-role-select { font-size: 10px; color: var(--primary-color); text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 4px; background: transparent; cursor: pointer; outline: none; }
+body { padding-top: 80px; } /* Prevent overlap */
+</style>
+<script>
+  // Ensure AppAssets is loaded before this component
+  if (typeof AppAssets !== 'undefined') {
+    document.getElementById('header-logo').src = AppAssets['logo4']; // logo with text for top bar
+  }
+
+  function changeUserRole(newRole) {
+    // setBusyCursor (ui_scripts.html) marks the whole page, not just the body
+    setBusyCursor(true);
+    // The switch is applied by doGet on the way in, instead of by a
+    // google.script.run command followed by a redirect. The iframe is sandboxed
+    // with allow-top-navigation-by-user-activation and Chrome's transient
+    // activation expires a few seconds after the click, so redirecting from the
+    // callback of a slow call was being silently blocked: no error, no
+    // navigation, busy cursor stuck. Navigating right here — still inside the
+    // change event — always carries the activation.
+    // The server-baked app URL is the same pattern used in ui_app_login.html
+    // (google.script.host.pathname does not exist in the real API).
+    window.top.location.href = appUrl()
+      + '?page=switch_role&role=' + encodeURIComponent(newRole);
+  }
+
+  // Mesmo caminho da troca de papel, pelo mesmo motivo: navegar aqui, dentro do
+  // evento do select, mantém a ativação transitória que o sandbox do iframe
+  // exige. O papel é recalculado no servidor para o período de destino.
+  function changeUserSemester(newSemester) {
+    setBusyCursor(true);
+    window.top.location.href = appUrl()
+      + '?page=switch_semester&semester=' + encodeURIComponent(newSemester);
+  }
+</script>

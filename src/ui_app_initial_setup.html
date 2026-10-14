@@ -1,0 +1,175 @@
+<!-- FILE: ui_app_initial_setup.html -->
+<!-- DESC: System configuration: Drive folder and the three document templates -->
+<!-- AUTH: Andre Cavalcante -->
+<!-- DATE: July, 2026 -->
+<!-- LICENSE: GPL-v3 -->
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <?!= include('ui_styles') ?>
+  </head>
+  <body>
+    <!-- Hidden Assets -->
+    <div style="display:none;"><?!= include('ui_asset_logo1') ?></div>
+
+    <div class="flex-center">
+      <div class="container card">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <img id="logo1" height="120" />
+      </div>
+
+      <h2><? if (isBootstrap) { ?>Configuração Inicial do Sistema<? } else { ?>Configuração do Sistema<? } ?></h2>
+
+      <p style="color: var(--secondary-color); font-size: 14px;">
+        <? if (isBootstrap) { ?>
+          <? if (!hasRegistry) { ?>
+            Nenhum registro base encontrado. Para inicializar o TCC WebApp, forneça o ID da pasta do Google Drive onde os registros e os períodos letivos serão salvos<? if (!hasTemplate) { ?> e o documento modelo da proposta<? } ?>.
+          <? } else { ?>
+            Falta configurar o documento modelo da proposta de TCC para liberar o sistema.
+          <? } ?>
+        <? } else { ?>
+          Os documentos modelo que o sistema duplica. Só o modelo da proposta é
+          exigido para o sistema funcionar; os outros dois são lidos na Fase 4,
+          na hora de gerar a Ata e a Folha de Aprovação. Deixe em branco
+          qualquer campo que não quiser alterar.
+        <? } ?>
+      </p>
+
+      <form id="setupForm">
+        <? if (!hasRegistry) { ?>
+          <div class="input-group">
+            <label for="folderId">Pasta no Drive (Data Dir):</label>
+            <input type="text" id="folderId" required placeholder="Cole o link da pasta ou só o ID" />
+          </div>
+        <? } ?>
+
+        <div class="input-group">
+          <label for="templateDocId">
+            Documento Modelo da Proposta (link ou ID do Google Docs):
+            <? if (hasTemplate) { ?><span class="badge badge-approved">configurado</span><? } ?>
+          </label>
+          <input type="text" id="templateDocId" <? if (!hasTemplate) { ?>required<? } ?>
+                 placeholder="<? if (hasTemplate) { ?>Deixe em branco para manter o atual<? } else { ?>Cole o link do Google Docs ou só o ID<? } ?>" />
+          <p style="color: var(--secondary-color); font-size: 12px; margin-top: 6px;">
+            Deve conter os marcadores <code>{{TITULO}}</code>, <code>{{NOME_ALUNO}}</code> e
+            <code>{{MATRICULA}}</code>, além das seções Resumo, Objetivos, Metodologia e Referências e os
+            logos da UFAM/TCC-WebApp já posicionados. O sistema duplica esse documento para cada aluno.
+          </p>
+        </div>
+
+        <!-- Os dois modelos da Fase 4. NUNCA obrigatórios: exigi-los aqui
+             travaria na tela de configuração uma instalação que só quer rodar
+             as Fases 1 a 3, e essa tela é o que o app mostra no lugar de todo
+             o resto. A cobrança acontece na hora de gerar o documento, em
+             _requireTemplate_ (ServiceSetup.js). -->
+        <div class="input-group">
+          <label for="ataTemplateDocId">
+            Documento Modelo da Ata da Defesa (Fase 4):
+            <? if (hasAta) { ?><span class="badge badge-approved">configurado</span><? } else { ?><span class="badge badge-neutral">não configurado</span><? } ?>
+          </label>
+          <input type="text" id="ataTemplateDocId"
+                 placeholder="<? if (hasAta) { ?>Deixe em branco para manter o atual<? } else { ?>Opcional agora — exigido ao gerar a primeira Ata<? } ?>" />
+          <p style="color: var(--secondary-color); font-size: 12px; margin-top: 6px;">
+            Impresso para a defesa e, depois de assinado, o comprovante de
+            participação de cada membro da banca.
+          </p>
+        </div>
+
+        <div class="input-group">
+          <label for="approvalTemplateDocId">
+            Documento Modelo da Folha de Aprovação (Fase 4):
+            <? if (hasApproval) { ?><span class="badge badge-approved">configurado</span><? } else { ?><span class="badge badge-neutral">não configurado</span><? } ?>
+          </label>
+          <input type="text" id="approvalTemplateDocId"
+                 placeholder="<? if (hasApproval) { ?>Deixe em branco para manter o atual<? } else { ?>Opcional agora — exigido ao encerrar a primeira defesa<? } ?>" />
+          <p style="color: var(--secondary-color); font-size: 12px; margin-top: 6px;">
+            A página que o aluno insere na versão final do TCC logo após a folha
+            de rosto, exigida pela Biblioteca Central para a submissão ao RIU.
+          </p>
+        </div>
+
+        <button type="submit" id="btnSetup" class="btn btn-primary" style="margin-top: 20px;">Salvar Configuração</button>
+      </form>
+
+      <div id="setupSuccess" style="display:none; margin-top: 24px; padding: 16px; background: var(--success-bg, #e8f5e9); border: 1px solid var(--success-color, #4caf50); border-radius: 8px; text-align: center;">
+        <p id="setupSuccessMsg" style="margin: 0 0 12px; font-size: 15px; color: var(--success-color, #2e7d32);">
+          ✓ Configuração concluída com sucesso!
+        </p>
+        <button class="btn btn-primary" onclick="window.top.location.href = '<?= ScriptApp.getService().getUrl() ?>'">Acessar o sistema</button>
+      </div>
+
+      <div id="setupError" style="display:none; margin-top: 24px; padding: 16px; background: #fdecea; border: 1px solid #f44336; border-radius: 8px; text-align: center;">
+        <p id="setupErrorMsg" style="margin: 0; font-size: 14px; color: #c62828;"></p>
+      </div>
+
+      <? if (!isBootstrap) { ?>
+        <p style="text-align:center; margin-top:18px; font-size:13px;">
+          <a href="<?= ScriptApp.getService().getUrl() ?>" target="_top">← Voltar ao sistema</a>
+        </p>
+      <? } ?>
+      </div>
+    </div>
+
+    <?!= include('ui_scripts') ?>
+
+    <script>
+      // Load image from base64 assets
+      document.getElementById('logo1').src = AppAssets['logo1'];
+
+      document.getElementById('setupForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const btn = document.getElementById('btnSetup');
+        btn.disabled = true;
+        btn.innerText = "Configurando...";
+        document.getElementById('setupError').style.display = 'none';
+
+        // Um objeto, não uma lista de argumentos: a tela foi de dois campos
+        // para quatro, e posicional já estava ilegível no terceiro.
+        google.script.run
+          .withSuccessHandler(onSetupSuccess)
+          .withFailureHandler(onSetupError)
+          .processSystemSetup({
+            folderId:             fieldValue('folderId'),
+            templateDocId:        fieldValue('templateDocId'),
+            ataTemplateDocId:     fieldValue('ataTemplateDocId'),
+            approvalTemplateDocId: fieldValue('approvalTemplateDocId')
+          });
+      });
+
+      // Campo ausente (a pasta some depois que o registro existe) vira '', que
+      // o servidor lê como "não mexer" — e não como "apagar".
+      function fieldValue(id) {
+        const el = document.getElementById(id);
+        return el ? el.value.trim() : '';
+      }
+
+      function onSetupSuccess(response) {
+         if(response.success) {
+           document.getElementById('setupForm').style.display = 'none';
+           document.getElementById('setupSuccessMsg').innerText = '✓ ' + (response.msg || 'Configuração concluída com sucesso!');
+           document.getElementById('setupSuccess').style.display = 'block';
+         } else {
+           const errDiv = document.getElementById('setupError');
+           document.getElementById('setupErrorMsg').innerText = 'Falha: ' + response.msg;
+           errDiv.style.display = 'block';
+           resetForm();
+         }
+      }
+
+      function onSetupError(err) {
+        console.error("Erro técnico:", err);
+        const errDiv = document.getElementById('setupError');
+        document.getElementById('setupErrorMsg').innerText = 'Erro técnico na comunicação com o servidor. Tente novamente.';
+        errDiv.style.display = 'block';
+        resetForm();
+      }
+
+      function resetForm() {
+        const btn = document.getElementById('btnSetup');
+        btn.disabled = false;
+        btn.innerText = "Salvar Configuração";
+      }
+    </script>
+  </body>
+</html>

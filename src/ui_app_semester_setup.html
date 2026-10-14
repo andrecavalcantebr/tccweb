@@ -1,0 +1,94 @@
+<!-- FILE: ui_app_semester_setup.html -->
+<!-- DESC: Configuration screen for creating a new semester -->
+<!-- AUTH: Andre Cavalcante -->
+<!-- DATE: July, 2026 -->
+<!-- LICENSE: GPL-v3 -->
+<!DOCTYPE html>
+<html>
+  <head><?!= include('ui_styles') ?></head>
+  <body>
+    <!-- Hidden Assets -->
+    <div style="display:none;"><?!= include('ui_asset_logo1') ?></div>
+    
+    <div class="flex-center">
+      <div class="container card">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <img id="logo1" height="120" />
+        </div>
+        <h2 style="text-align: center; color: var(--primary-color);">Iniciar Período Letivo</h2>
+        <p id="setupIntro" style="color: var(--secondary-color); font-size: 14px;">
+          Não há nenhum período (semestre) ativo no momento. Por favor, crie um novo para habilitar o painel PFC.
+        </p>
+        
+        <form id="setupSemesterForm">
+          <div class="input-group">
+            <label for="semesterName">Período Letivo (Semester):</label>
+            <input type="text" id="semesterName" required placeholder="Ex: 2026.2">
+          </div>
+          
+          <div class="input-group">
+            <label for="inchargeEmail">Responsável da Turma (E-mail):</label>
+            <!-- Informativo: quem é gravado é a conta que publicou o app -->
+            <input type="email" id="inchargeEmail" value="<?= userEmail ?>" readonly style="background-color: #f1f3f4; color: #5f6368;">
+          </div>
+          
+          <button type="submit" id="btnSetup" class="btn btn-primary" style="margin-top: 20px;">Criar Período Letivo</button>
+        </form>
+
+        <div id="setupSuccess" style="display:none; margin-top: 24px; padding: 16px; background: var(--success-bg, #e8f5e9); border: 1px solid var(--success-color, #4caf50); border-radius: 8px; text-align: center;">
+          <p style="margin: 0 0 12px; font-size: 15px; color: var(--success-color, #2e7d32);">✓ Período letivo criado com sucesso!</p>
+          <p style="margin: 0 0 12px; font-size: 14px;">
+            O <strong>código de matrícula</strong> do período aparece no seu painel: é ele
+            que os alunos digitam no primeiro acesso.
+          </p>
+          <button class="btn btn-primary" onclick="window.top.location.href = '<?= ScriptApp.getService().getUrl() ?>'">Acessar o sistema</button>
+        </div>
+
+        <div id="setupError" style="display:none; margin-top: 24px; padding: 16px; background: #fdecea; border: 1px solid #f44336; border-radius: 8px; text-align: center;">
+          <p id="setupErrorMsg" style="margin: 0; font-size: 14px; color: #c62828;"></p>
+        </div>
+      </div>
+    </div>
+
+    <?!= include('ui_scripts') ?>
+    
+    <script>
+      // Load image from base64 assets
+      if (typeof AppAssets !== 'undefined') { document.getElementById('logo1').src = AppAssets['logo1']; }
+
+      document.getElementById('setupSemesterForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const btn = document.getElementById('btnSetup');
+        btn.disabled = true;
+        btn.innerText = "Criando Planilhas... (Aguarde)";
+
+        // O Responsável não vai no payload: o servidor grava a conta que
+        // publicou o app, a única autorizada a rodar o setup (ServiceSetup.js).
+        // O campo na tela é só informativo.
+        const data = {
+          semesterName: document.getElementById('semesterName').value
+        };
+        
+        google.script.run
+          .withSuccessHandler(function(res) {
+            if (res.success) {
+              document.getElementById('setupIntro').style.display = 'none';
+              document.getElementById('setupSemesterForm').style.display = 'none';
+              document.getElementById('setupSuccess').style.display = 'block';
+            } else {
+              document.getElementById('setupErrorMsg').innerText = 'Falha: ' + res.msg;
+              document.getElementById('setupError').style.display = 'block';
+              btn.disabled = false; btn.innerText = 'Criar Período Letivo';
+            }
+          })
+          .withFailureHandler(function(err) {
+            console.error(err);
+            document.getElementById('setupErrorMsg').innerText = 'Erro técnico na comunicação com o servidor. Tente novamente.';
+            document.getElementById('setupError').style.display = 'block';
+            btn.disabled = false; btn.innerText = 'Criar Período Letivo';
+          })
+          .processSemesterSetup(data);
+      });
+    </script>
+  </body>
+</html>

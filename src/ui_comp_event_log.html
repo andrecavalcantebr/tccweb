@@ -1,0 +1,162 @@
+<!-- FILE: ui_comp_event_log.html -->
+<!-- DESC: Activity log of a TCC — system events, comments and the box to write one -->
+<!-- AUTH: Andre Cavalcante -->
+<!-- DATE: August, 2026 -->
+<!-- LICENSE: GPL-v3 -->
+
+<script>
+/**
+ * renderEventLog(container, events, options)
+ *
+ * Shared by the three panels: what changes between them is only who may write
+ * (options.canComment) and which proposal it belongs to.
+ *
+ * `events` comes from the server oldest-first (see ServiceEventLog.js) and is
+ * shown newest-first, the way the old notes timeline was.
+ *
+ * options:
+ *   proposalId  — required to write; without it the box is not rendered
+ *   canComment  — whether to offer the comment box
+ *   onApplied   — called with the command result after a comment is posted
+ *                 (the panels pass applyResult, which re-renders from it)
+ */
+function renderEventLog(container, events, options) {
+  const opts = options || {};
+  const list = (events || []).slice();
+
+  container.innerHTML = '';
+  const box = document.createElement('div');
+  box.className = 'event-log';
+
+  const head = document.createElement('div');
+  head.className = 'event-log-head';
+  head.innerHTML = '<h4>Linha do Tempo</h4>';
+
+  // System entries outnumber comments by far in a full cycle, so the filter is
+  // what keeps the messages between people findable.
+  const filterLabel = document.createElement('label');
+  filterLabel.className = 'event-log-filter';
+  const filterBox = document.createElement('input');
+  filterBox.type = 'checkbox';
+  filterLabel.appendChild(filterBox);
+  filterLabel.appendChild(document.createTextNode(' Só comentários'));
+  head.appendChild(filterLabel);
+  box.appendChild(head);
+
+  const ul = document.createElement('ul');
+  ul.className = 'event-list';
+  box.appendChild(ul);
+
+  // Only the most recent entries are shown at first. A full cycle logs 10 to 15
+  // system transitions per student, and unfolded they pushed everything else off
+  // the screen — in the Student panel the committee and the proposal summary, in
+  // the Advisor's detail view the same. The newest entries are the ones that
+  // matter; the rest is history, one click away.
+  const COLLAPSED_ENTRIES = 5;
+  let expanded = false;
+
+  const more = document.createElement('button');
+  more.type = 'button';
+  more.className = 'event-log-more';
+  more.onclick = function () { expanded = !expanded; paint(); };
+  box.appendChild(more);
+
+  function paint() {
+    const shown = filterBox.checked
+      ? list.filter(ev => ev.type === 'Comentário')
+      : list;
+
+    if (shown.length === 0) {
+      ul.innerHTML = '<li class="event-empty">' +
+        (filterBox.checked ? 'Nenhum comentário ainda.' : 'Nada registrado ainda.') + '</li>';
+      more.style.display = 'none';
+      return;
+    }
+
+    const newestFirst = shown.slice().reverse();
+    const visible = expanded ? newestFirst : newestFirst.slice(0, COLLAPSED_ENTRIES);
+
+    // The toggle stays put once opened, so collapsing again is possible; it is
+    // hidden altogether when everything already fits.
+    if (newestFirst.length > COLLAPSED_ENTRIES) {
+      more.style.display = 'block';
+      more.innerText = expanded
+        ? 'Ver menos'
+        : `Ver todas (${newestFirst.length})`;
+    } else {
+      more.style.display = 'none';
+    }
+
+    ul.innerHTML = visible.map(ev => {
+      const isSystem = ev.type === 'Sistema';
+      const to = ev.toRole ? ` <span class="event-to">para ${escHtml(ev.toRole)}</span>` : '';
+      return `
+        <li class="event-entry ${isSystem ? 'event-system' : 'event-comment'}">
+          <div class="event-meta">
+            <span class="event-author">${escHtml(isSystem ? 'Sistema' : ev.role)}${to}</span>
+            <span class="event-date">${escHtml(formatEventDate(ev.timestamp))}</span>
+          </div>
+          <div class="event-message">${escHtml(ev.message)}</div>
+          ${!isSystem && ev.email ? `<div class="event-author-email">${escHtml(ev.email)}</div>` : ''}
+        </li>`;
+    }).join('');
+  }
+
+  filterBox.onchange = paint;
+  paint();
+
+  if (opts.canComment && opts.proposalId) {
+    box.appendChild(buildCommentBox(opts));
+  }
+  container.appendChild(box);
+}
+
+function buildCommentBox(opts) {
+  const wrap = document.createElement('div');
+  wrap.className = 'event-log-compose';
+
+  const label = document.createElement('label');
+  label.innerText = 'Escrever no registro';
+  const area = document.createElement('textarea');
+  area.rows = 2;
+  area.placeholder = 'Mensagem para quem está com o processo — fica registrada na linha do tempo';
+
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-secondary';
+  btn.style.width = 'auto';
+  btn.innerText = 'Enviar';
+  btn.onclick = function () {
+    const text = area.value.trim();
+    if (!text) return;
+    const done = beginBusy(btn, 'Enviando…');
+    google.script.run
+      .withSuccessHandler(res => {
+        done();
+        area.value = '';
+        if (res && res.success) {
+          if (opts.onApplied) opts.onApplied(res);
+        } else {
+          appAlert('Erro ao registrar: ' + (res ? res.msg : 'desconhecido'));
+        }
+      })
+      .withFailureHandler(err => { done(); appAlert('Erro técnico: ' + err.message); })
+      .cmdAddComment(opts.proposalId, text);
+  };
+
+  wrap.appendChild(label);
+  wrap.appendChild(area);
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+// Timestamps travel as ISO strings; seconds add nothing here.
+function formatEventDate(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return String(value);
+  return d.toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+}
+</script>

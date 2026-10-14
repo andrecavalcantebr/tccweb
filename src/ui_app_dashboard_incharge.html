@@ -1,0 +1,1099 @@
+<!-- FILE: ui_app_dashboard_incharge.html -->
+<!-- DESC: Main view for the Incharge (Responsável) — real data from ServiceDashboard -->
+<!-- AUTH: Andre Cavalcante -->
+<!-- DATE: July, 2026 -->
+<!-- LICENSE: GPL-v3 -->
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <?!= include('ui_styles') ?>
+  </head>
+  <body>
+    <!-- Hidden Assets -->
+    <div style="display:none;"><?!= include('ui_asset_logo4') ?></div>
+
+    <!-- Component: Header -->
+    <?!= include('ui_comp_page_header') ?>
+
+    <div class="main-content" style="max-width: 1200px; margin: 0 auto; padding: 20px;">
+
+      <!-- Messages Bar -->
+      <div id="messagesBar" class="messages-bar"></div>
+
+      <!-- Metric Cards -->
+      <div class="metrics-grid" id="metricsGrid">
+        <div class="metric-card mc-blue">
+          <span class="metric-number" id="metricTotal">—</span>
+          <span class="metric-label">Total de Alunos</span>
+        </div>
+        <div class="metric-card mc-yellow">
+          <span class="metric-number" id="metricAwaiting">—</span>
+          <span class="metric-label">Aguardando Homologação</span>
+        </div>
+        <div class="metric-card mc-red">
+          <span class="metric-number" id="metricNoProposal">—</span>
+          <span class="metric-label">Sem Proposta</span>
+        </div>
+        <div class="metric-card mc-green">
+          <span class="metric-number" id="metricFinalized">—</span>
+          <span class="metric-label">TCCs Finalizados</span>
+        </div>
+      </div>
+
+      <!-- Master Table -->
+      <!-- Sem overflow:hidden no card: ele cortaria o menu de ações. O corte
+           dos cantos fica no invólucro da tabela, logo abaixo. -->
+      <div class="card" style="padding: 0;">
+        <div style="padding: 16px 20px; border-bottom: 1px solid var(--border-color);
+                    display: flex; align-items: center; justify-content: space-between;">
+          <h3 style="margin: 0;">Tabela Mestra — Alunos do Período</h3>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span id="semesterLabel" style="font-size: 13px; color: var(--secondary-color);"></span>
+            <!-- Um menu, não uma fileira de botões nem um <select>: o select
+                 serve para escolher valor — a opção fica marcada, escolher a
+                 mesma de novo não dispara nada, e as setas do teclado disparam
+                 sem querer. Encerrar fica por último, separado e em vermelho:
+                 é a única ação que não se desfaz pelo próprio painel. -->
+            <details class="action-menu" id="actionMenu">
+              <summary class="btn btn-secondary">Ações do período ▾</summary>
+              <div class="action-menu-list">
+                <button type="button" onclick="runMenuAction(exportReport)">Exportar consolidado (CSV)</button>
+                <button type="button" onclick="runMenuAction(openTeacherPanel)">Professores</button>
+                <button type="button" onclick="runMenuAction(openSemesterPanel)">Período Letivo</button>
+                <!-- Configuração é o "app 1": pasta do Drive e documentos modelo,
+                     do dono do script. A opção só existe para ele — na prática o
+                     Responsável costuma ser a mesma pessoa, mas quando não for,
+                     quem não pode configurar nem vê que há o que configurar. -->
+                <? if (isAppOwner) { ?>
+                  <button type="button" title="Pasta do Drive e documentos modelo (só a conta que publicou o app)"
+                          onclick="runMenuAction(openSystemSetup)">⚙ Configuração do Sistema</button>
+                <? } ?>
+                <hr>
+                <button type="button" class="is-danger" onclick="runMenuAction(() => endSemester(null))">Encerrar Período</button>
+              </div>
+            </details>
+          </div>
+        </div>
+        <div id="reportFallback" class="file-link-hint" style="display:none; padding:8px 20px 0;"></div>
+        <div style="overflow: hidden;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Aluno(a)</th>
+              <th>E-mail</th>
+              <th>Orientador(a)</th>
+              <th>Título</th>
+              <th>Status</th>
+              <th style="text-align:center;">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="masterTableBody">
+            <tr>
+              <td colspan="6" style="padding: 30px; text-align: center; color: var(--secondary-color);">
+                Carregando os dados do período…
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+
+      <!-- Cadastro de professores. Substitui o que o Google Classroom fazia: a
+           turma deixou de ser a fonte de pessoas (ver roadmap.md). O professor
+           é cadastrado SÓ aqui — auto-cadastro que concedesse Orientador seria
+           escalação de privilégio. O código de matrícula do aluno mora na guia
+           "Período Letivo" — não é assunto de professor, é assunto de período. -->
+      <div class="card" id="teacherPanel" style="display:none; margin-top:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="margin:0;">Professores</h3>
+          <button class="btn btn-secondary" style="width:auto;padding:6px 12px;font-size:12px;"
+                  onclick="closeTeacherPanel()">Fechar</button>
+        </div>
+
+        <div class="form-row" style="margin-top:16px;">
+          <div class="input-group">
+            <label>Nome do professor(a)</label>
+            <input type="text" id="fTeacherName" placeholder="Nome completo, como sai nos documentos">
+          </div>
+          <div class="input-group">
+            <label>E-mail</label>
+            <input type="email" id="fTeacherEmail" placeholder="professor@ufam.edu.br"
+                   oninput="updateTeacherKindHint()">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="input-group">
+            <label>Titulação</label>
+            <input type="text" id="fTeacherTitulacao" placeholder="Dr., Dra., MSc.">
+          </div>
+          <div class="input-group">
+            <label>Instituição</label>
+            <input type="text" id="fTeacherInstituicao" placeholder="UFAM">
+          </div>
+          <div class="input-group">
+            <label>Telefone</label>
+            <input type="text" id="fTeacherPhone" placeholder="(92) 90000-0000">
+          </div>
+        </div>
+        <!-- Não há mais caixinha "é externo": o sistema deduz do domínio do
+             e-mail, que é o critério de verdade. Isto aqui só mostra o que ele
+             deduziu, enquanto o e-mail é digitado. -->
+        <p id="teacherKindHint" style="font-size:13px; margin:4px 0 0; color:var(--secondary-color);">
+          O tipo de acesso é definido pelo domínio do e-mail.
+        </p>
+        <div class="actions-bar" id="teacherActions" style="box-shadow:none;padding:0;margin-top:8px;">
+          <!-- Dois gestos para o mesmo fim, e a diferença é quem digita os
+               dados. Convidar só precisa do e-mail: a pessoa preenche o resto,
+               inclusive titulação e instituição, que ela sabe melhor do que o
+               Responsável e que saem na Ata e na Folha de Aprovação. -->
+          <button class="btn btn-primary" onclick="inviteTeacher(this)">Convidar por e-mail</button>
+          <button class="btn btn-secondary" onclick="saveTeacher(this)">Cadastrar direto</button>
+        </div>
+        <p style="font-size:12px; color:var(--secondary-color); margin:8px 0 0;">
+          <strong>Convidar</strong> pede só o e-mail e manda um link para a pessoa
+          completar o cadastro — o link vale uma vez e só para aquele endereço.
+          <strong>Cadastrar direto</strong> grava o que você digitou e já deixa
+          o professor ativo.
+        </p>
+
+        <table class="data-table" style="margin-top:20px;">
+          <thead>
+            <tr>
+              <th>Nome</th><th>E-mail</th><th>Titulação</th><th>Instituição</th>
+              <th style="text-align:center;">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="teacherTableBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Guia do período: o código de matrícula do período corrente (gerado e
+           regenerado só aqui) e a criação de um período novo. Períodos
+           coexistem: criar um não encerra os outros (o seguinte é preparado
+           enquanto o atual corre). O Responsável informado passa a ser o
+           Responsável daquele período — é assim que a bola é passada para
+           outro professor. -->
+      <div class="card" id="semesterPanel" style="display:none; margin-top:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="margin:0;">Período Letivo</h3>
+          <button class="btn btn-secondary" style="width:auto;padding:6px 12px;font-size:12px;"
+                  onclick="closeSemesterPanel()">Fechar</button>
+        </div>
+
+        <div style="margin-top:16px; padding:12px; background:#e8f0fe; border-radius:6px;">
+          <strong>Código de matrícula do período:</strong>
+          <span id="enrollmentCode" style="font-family:monospace; font-size:20px; letter-spacing:3px;"></span>
+          <button class="btn btn-secondary" style="width:auto;padding:4px 10px;font-size:12px;margin-left:10px;"
+                  onclick="regenerateCode(this)">Gerar novo</button>
+          <p style="margin:8px 0 0; font-size:12px; color:var(--secondary-color);">
+            É o que o aluno digita no primeiro acesso. Divulgue no Plano de Ensino.
+            Gerar um novo invalida o anterior na hora — o Orientador que repassa o
+            link aos próprios alunos (guia "Convite aos Alunos", na visão dele) vê
+            o novo assim que ele existe, sem precisar fazer nada.
+          </p>
+
+          <!-- O mesmo código, em forma de link: é o que o convite da turma do
+               Classroom fazia. O aluno abre e o campo já vem preenchido; o
+               código continua existindo para quem recebe o Plano de Ensino
+               impresso. -->
+          <div style="margin-top:12px; padding-top:12px; border-top:1px solid #c6dafc;">
+            <strong style="font-size:13px;">Link de matrícula para os alunos:</strong>
+            <div style="display:flex; gap:8px; margin-top:6px;">
+              <input type="text" id="enrollmentLink" readonly
+                     style="flex:1; font-size:12px; font-family:monospace; background:#fff;">
+              <button class="btn btn-secondary" style="width:auto;padding:4px 10px;font-size:12px;"
+                      onclick="copyEnrollmentLink('enrollmentLink')">Copiar</button>
+            </div>
+            <p style="margin:6px 0 0; font-size:12px; color:var(--secondary-color);">
+              Leva direto ao cadastro (nome, matrícula e e-mail) com o código já
+              preenchido. Gerar um código novo muda este link também.
+            </p>
+          </div>
+        </div>
+
+        <!-- Calendário acadêmico do período corrente. Não confundir com quando
+             o período foi criado e encerrado no sistema — quase nunca são as
+             mesmas datas, e o consolidado traz as duas. -->
+        <h4 style="margin:20px 0 0;">Datas do período corrente</h4>
+        <div class="form-row" style="margin-top:12px;">
+          <div class="input-group">
+            <label>Início das aulas</label>
+            <input type="date" id="fCurrentClassesStart">
+          </div>
+          <div class="input-group">
+            <label>Fim das aulas</label>
+            <input type="date" id="fCurrentClassesEnd">
+          </div>
+        </div>
+        <p id="semesterSystemDates" style="font-size:12px;color:var(--secondary-color);margin:4px 0 0;"></p>
+        <div class="actions-bar" style="box-shadow:none;padding:0;margin-top:8px;">
+          <button class="btn btn-secondary" onclick="saveSemesterDates(this)">Salvar datas</button>
+        </div>
+
+        <h4 style="margin:20px 0 0;">Novo Período Letivo</h4>
+        <div class="form-row" style="margin-top:12px;">
+          <div class="input-group">
+            <label>Período Letivo</label>
+            <input type="text" id="fSemesterName" placeholder="Ex.: 2027.1">
+          </div>
+          <div class="input-group">
+            <label>Início das aulas</label>
+            <input type="date" id="fClassesStart">
+          </div>
+          <div class="input-group">
+            <label>Fim das aulas</label>
+            <input type="date" id="fClassesEnd">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="input-group">
+            <label>Responsável pelo novo período (e-mail)</label>
+            <input type="email" id="fInchargeEmail">
+          </div>
+          <div class="input-group">
+            <label>Nome do Responsável</label>
+            <input type="text" id="fInchargeName" placeholder="Como sai nos documentos">
+          </div>
+        </div>
+        <p style="font-size:12px;color:var(--secondary-color);margin:4px 0 0;">
+          Deixe o seu e-mail para continuar responsável, ou informe outro para
+          passar a responsabilidade. Quem for indicado é cadastrado como
+          professor(a) automaticamente — o Responsável também orienta, e sem
+          essa linha a visão de Orientador não apareceria para ele.
+        </p>
+        <div class="actions-bar" id="semesterActions" style="box-shadow:none;padding:0;margin-top:8px;">
+          <button class="btn btn-primary" onclick="createSemester(this)">Criar Período</button>
+        </div>
+      </div>
+
+      <!-- Detail panel: the whole activity log of one student. É o que faltava
+           para a homologação — antes o Responsável decidia vendo só o status e
+           o balão da última anotação. -->
+      <div class="card" id="detailPanel" style="display:none; margin-top:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="margin:0;">Andamento de <span id="detailStudent"></span></h3>
+          <button class="btn btn-secondary" style="width:auto;padding:6px 12px;font-size:12px;"
+                  onclick="closeDetailPanel()">Fechar</button>
+        </div>
+        <div id="detailDoc"></div>
+        <div id="detailLog"></div>
+      </div>
+
+      <!-- Inline committee panel (Fase 3) — same inline pattern used by the
+           Advisor's "Retornar para Ajustes", instead of a modal -->
+      <div class="card" id="committeePanel" style="display:none; margin-top:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="margin:0;">Banca de <span id="committeeStudent"></span></h3>
+          <button class="btn btn-secondary" style="width:auto;padding:6px 12px;font-size:12px;"
+                  onclick="closeCommitteePanel()">Fechar</button>
+        </div>
+        <div id="committeeBody"></div>
+        <div class="actions-bar" id="committeeActions" style="box-shadow:none;padding:0;margin-top:8px;"></div>
+      </div>
+
+    </div>
+
+    <?!= include('ui_scripts') ?>
+    <?!= include('ui_comp_modal') ?>
+    <?!= include('ui_comp_event_log') ?>
+
+    <!-- Controller for Incharge -->
+    <script>
+      document.getElementById('headerViewDesc').innerText = 'Painel do Responsável';
+
+      // escHtml and renderCommitteeSummary are shared helpers defined in
+      // ui_scripts.html (included above).
+
+      let rows = [];
+      let teachers = [];
+      let enrollmentCode = '';
+      let institutionalDomain = '';
+      let semesterInfo = {};
+      // Vêm do cabeçalho já renderizado, nunca interpolados numa string JS:
+      // o escape do scriptlet de impressão é contextual e, quando se perde,
+      // devolve o valor JÁ entre aspas. Ver rationale 7.11 — e 7.9, que é o
+      // mesmo problema visto pelo outro lado (apóstrofo em nome próprio).
+      const currentUserEmail = (function() {
+        const el = document.querySelector('.user-email');
+        return el ? el.textContent.trim() : '';
+      })();
+      // Lido do cabeçalho, não interpolado numa string JS: o scriptlet de
+      // impressão escapa o apóstrofo como &#39;, e um nome como "D'Ávila"
+      // chegaria estragado (ou, sem escape, fecharia a string). No HTML o
+      // escape é o correto, então a fonte confiável é o próprio elemento já
+      // renderizado.
+      const currentUserName = (function() {
+        const el = document.querySelector('.user-name');
+        return el ? el.textContent.trim() : '';
+      })();
+      const currentSemesterName = appSemester();
+
+      // ── Load dashboard data on page load ──────────────────────────────
+      // Ver o comentário equivalente em ui_app_dashboard_student.html: o painel
+      // vem montado dentro da página, e isso elimina uma execução do Apps
+      // Script por abertura.
+      let initialPayload = <?!= typeof initialPayload !== 'undefined' && initialPayload ? initialPayload : 'null' ?>;
+
+      function loadDashboard() {
+        if (initialPayload) {
+          const payload = initialPayload;
+          initialPayload = null;
+          return renderDashboard(payload);
+        }
+        document.getElementById('masterTableBody').innerHTML =
+          '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--secondary-color);">' +
+          'Carregando os dados do período…</td></tr>';
+        // startLoadWatchdog/clearLoadWatchdog live in ui_scripts.html: the call
+        // can hang without either handler running, and the table would stay on
+        // "Carregando…" forever.
+        startLoadWatchdog(onLoadTimeout);
+        google.script.run
+          .withSuccessHandler(function (data) { clearLoadWatchdog(); renderDashboard(data); })
+          .withFailureHandler(function (err) { clearLoadWatchdog(); onLoadError(err); })
+          .getInchargeDashboardData();
+      }
+      loadDashboard();
+
+      // Toda ação devolve o painel já atualizado, montado na mesma execução que
+      // gravou (ver _dashboardPayloadForRole_ em ServiceDashboard.js). Recarregar
+      // numa segunda execução mostrava o estado anterior à ação.
+      function applyResult(res) {
+        if (res && res.dashboard) renderDashboard(res.dashboard);
+        else loadDashboard();
+      }
+
+      function renderDashboard(data) {
+        if (!data || !data.success) { return onLoadError((data && data.msg) || "Dados não retornados do servidor."); }
+        rows = data.rows || [];
+        teachers = data.teachers || [];
+        enrollmentCode = data.enrollmentCode || '';
+        institutionalDomain = data.institutionalDomain || '';
+        semesterInfo = data.semesterInfo || {};
+        updateTeacherKindHint();
+        closeCommitteePanel();
+        closeDetailPanel();
+        closeSemesterPanel();
+        renderTeachers();
+        renderEnrollmentCode();
+
+        // Update metrics
+        document.getElementById('metricTotal').innerText      = data.metrics.totalStudents;
+        // Uma métrica só para tudo o que espera o Responsável: proposta, banca,
+        // defesa e finalização. Quatro números separados espalhariam a mesma
+        // pergunta — "o que está na minha mão?" — por quatro cartões.
+        document.getElementById('metricAwaiting').innerText   =
+          data.metrics.awaitingProposalHomologation +
+          data.metrics.awaitingCommitteeHomologation +
+          data.metrics.awaitingDefenseHomologation +
+          data.metrics.awaitingFinalization;
+        document.getElementById('metricNoProposal').innerText = data.metrics.noProposal;
+        document.getElementById('metricFinalized').innerText  = data.metrics.finalized;
+        // Limpa o prefixo ' usado para forçar a string da data no banco
+        document.getElementById('semesterLabel').innerText    = 'Período: ' + String(data.semester).replace(/^'/, '');
+
+        // Render table
+        const tbody = document.getElementById('masterTableBody');
+        if (!data.rows || data.rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--secondary-color);">' +
+            'Nenhum aluno matriculado neste período ainda. Passe o código do ' +
+            'período aos alunos: eles se cadastram no primeiro acesso.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.rows.map(row => `
+          <tr>
+            <td>${escHtml(row.studentName)}</td>
+            <td style="font-size:12px;color:var(--secondary-color);">${escHtml(row.studentEmail)}</td>
+            <!-- Orientador não cadastrado: é a única pendência da tabela que só o
+                 Responsável resolve, e ela trava o aluno (sem o professor no
+                 sistema ninguém pode aprovar a proposta). Agora o conserto é
+                 aqui mesmo, em "Professores" — sem convite, sem espera. -->
+            <td style="font-size:12px;" title="${escHtml(row.advisorEmail)}">
+              ${escHtml(row.advisorName)}
+              ${row.advisorRegistered === false ? `
+                <span class="advisor-pending"
+                      title="Não está cadastrado(a) como professor(a). Cadastre em Professores para destravar a submissão do aluno.">
+                  ⚠ não cadastrado
+                </span>` : ''}
+            </td>
+            <td style="font-size:12px; max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
+                title="${escHtml(row.title)}">${escHtml(row.title)}</td>
+            <td><span class="badge ${escHtml(row.badgeClass)}">${escHtml(row.status)}</span>${buildLastNoteIndicator(row.lastNote)}</td>
+            <td style="text-align:center;">${buildActionBtn(row)}${buildDetailBtn(row)}</td>
+          </tr>
+        `).join('');
+      }
+
+      // Sempre disponível quando existe proposta: ver o andamento não depende
+      // de haver ação pendente.
+      function buildDetailBtn(row) {
+        if (!row.proposalId) return '';
+        return `<button class="btn btn-secondary" style="padding:5px 12px;font-size:12px;margin-left:6px;"
+                  onclick="openDetailPanel('${escHtml(row.proposalId)}')">Detalhes</button>`;
+      }
+
+      function buildActionBtn(row) {
+        if (row.permissions.canHomologate && row.proposalId) {
+          return `<button class="btn btn-primary" style="padding:5px 12px;font-size:12px;"
+                    onclick="homologateProposal('${escHtml(row.proposalId)}', this)">
+                    Homologar Proposta</button>`;
+        }
+        if (row.permissions.canHomologateCommittee && row.proposalId) {
+          return `<button class="btn btn-primary" style="padding:5px 12px;font-size:12px;"
+                    onclick="openCommitteePanel('${escHtml(row.proposalId)}')">
+                    Ver Banca</button>`;
+        }
+        // A ordem importa: quem tem ação pendente mostra a ação, e o resto cai
+        // no "Ver Banca" de consulta.
+        if (row.permissions.canHomologateDefense && row.proposalId) {
+          return `<button class="btn btn-primary" style="padding:5px 12px;font-size:12px;"
+                    onclick="homologateDefense('${escHtml(row.proposalId)}', this)">
+                    Homologar Defesa</button>`;
+        }
+        if (row.permissions.canFinalize && row.proposalId) {
+          return `<button class="btn btn-primary" style="padding:5px 12px;font-size:12px;"
+                    onclick="finalizeTcc('${escHtml(row.proposalId)}', this)">
+                    Finalizar TCC</button>`;
+        }
+        if (row.committee) {
+          return `<button class="btn btn-secondary" style="padding:5px 12px;font-size:12px;"
+                    onclick="openCommitteePanel('${escHtml(row.proposalId)}')">
+                    Ver Banca</button>`;
+        }
+        return '<span style="color:var(--secondary-color);font-size:12px;">—</span>';
+      }
+
+      /**
+       * Encerrar sem banca: aproveitamento ou desistência.
+       *
+       * Fica no "Detalhes" e não na coluna de ações porque é exceção, não passo
+       * do fluxo — e porque está disponível em quase todo status, então na
+       * coluna competiria com a ação legítima da vez.
+       */
+      function closePanelHtml(row) {
+        if (!row.permissions.canCloseWithoutDefense || !row.proposalId) return '';
+        return `
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-color);">
+            <h4 style="margin:0 0 6px;">Encerrar sem banca</h4>
+            <p style="font-size:13px;color:var(--secondary-color);margin:0 0 10px;">
+              Aproveitamento de estudos ou desistência. O parecer vai para o
+              registro de atividades, com o seu e-mail.
+            </p>
+            <div class="form-row">
+              <div class="input-group">
+                <label for="fCloseOutcome">Desfecho</label>
+                <select id="fCloseOutcome" onchange="toggleCloseGrade()">
+                  <option value="desistencia">Não finalizado (desistência)</option>
+                  <option value="aproveitamento">Finalizado por aproveitamento</option>
+                </select>
+              </div>
+              <div class="input-group" id="closeGradeGroup" style="display:none;">
+                <label for="fCloseGrade">Nota</label>
+                <input type="number" id="fCloseGrade" min="0" max="10" step="0.1">
+              </div>
+            </div>
+            <div class="input-group">
+              <label for="fCloseParecer">Parecer</label>
+              <textarea id="fCloseParecer" rows="2" placeholder="Obrigatório"></textarea>
+            </div>
+            <button class="btn btn-secondary" onclick="closeTcc('${escHtml(row.proposalId)}', this)"
+                    style="width:auto;padding:6px 14px;font-size:13px;">Encerrar TCC</button>
+          </div>`;
+      }
+
+      function toggleCloseGrade() {
+        const sel = document.getElementById('fCloseOutcome');
+        const grp = document.getElementById('closeGradeGroup');
+        if (sel && grp) grp.style.display = sel.value === 'aproveitamento' ? 'block' : 'none';
+      }
+
+      function homologateDefense(proposalId, btn) {
+        appConfirm('Homologar a defesa?\n\nIsto encerra a fase de Defesa e libera ' +
+                   'a revisão e a entrega final para o aluno.').then(ok => {
+          if (!ok) return;
+          runIncharge(btn, 'Homologando…', 'Defesa homologada.',
+            r => r.cmdHomologateDefense(proposalId));
+        });
+      }
+
+      function finalizeTcc(proposalId, btn) {
+        appConfirm('Finalizar este TCC?\n\nLance a nota no e-campus antes: aqui o ' +
+                   'fluxo se encerra.').then(ok => {
+          if (!ok) return;
+          runIncharge(btn, 'Finalizando…', 'TCC finalizado.',
+            r => r.cmdFinalizeTcc(proposalId));
+        });
+      }
+
+      function closeTcc(proposalId, btn) {
+        const outcome = (document.getElementById('fCloseOutcome') || {}).value || '';
+        const parecer = (document.getElementById('fCloseParecer') || {}).value || '';
+        const nota    = (document.getElementById('fCloseGrade') || {}).value || '';
+        if (!parecer.trim()) { showMessage('Escreva o parecer do encerramento.', true); return; }
+
+        appConfirm('Encerrar este TCC como "' +
+                   (outcome === 'aproveitamento' ? 'Finalizado por aproveitamento' : 'Não finalizado') +
+                   '"?\n\nEsta ação não pode ser desfeita pelo sistema.').then(ok => {
+          if (!ok) return;
+          runIncharge(btn, 'Encerrando…', 'TCC encerrado.',
+            r => r.cmdCloseTcc(proposalId, { outcome: outcome, parecer: parecer, nota: nota }));
+        });
+      }
+
+      /** Envelope comum dos comandos da Fase 4/5, como no painel do Orientador. */
+      function runIncharge(btn, busyLabel, okMessage, invoke) {
+        const done = beginBusy(btn, busyLabel);
+        invoke(google.script.run
+          .withSuccessHandler(res => {
+            done();
+            if (res && res.success) { showMessage(okMessage); applyResult(res); }
+            else showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+          })
+          .withFailureHandler(err => { done(); showMessage('Erro técnico: ' + err.message, true); }));
+      }
+
+      // Quick indicator of the latest advisor<->student note — full timeline
+      // lives in the Student/Advisor detail views (Incharge detail view is a
+      // roadmap item, see checkpoint.md).
+      // Inline SVG, not the 💬 emoji: the balloon has no glyph in some of the
+      // font stacks the browser picks here. It rendered as the "missing
+      // character" box — and, with a degenerate box to hover over, the tooltip
+      // became unreachable too. The SVG has a fixed size (see
+      // .last-note-indicator), so the hover target is always there; the text
+      // goes on the span AND inside the SVG, whichever the browser picks up.
+      function buildLastNoteIndicator(lastNote) {
+        if (!lastNote) return '';
+        const title = escHtml(`[${lastNote.role}] ${lastNote.message}`);
+        return `<span class="last-note-indicator" title="${title}">
+            <svg viewBox="0 0 24 24">
+              <title>${title}</title>
+              <path d="M20 2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3v4l5-4h8a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/>
+            </svg>
+          </span>`;
+      }
+
+      // ── Committee panel (Fase 3) ──────────────────────────────────────
+      function openCommitteePanel(proposalId) {
+        const row = rows.find(r => r.proposalId === proposalId);
+        if (!row || !row.committee) { showMessage('Banca ainda não submetida.', true); return; }
+
+        document.getElementById('committeeStudent').innerText = row.studentName;
+        document.getElementById('committeeBody').innerHTML = renderCommitteeSummary(row.committee);
+
+        const actions = document.getElementById('committeeActions');
+        actions.innerHTML = row.permissions.canHomologateCommittee
+          ? `<button class="btn btn-primary" onclick="homologateCommittee('${escHtml(proposalId)}', this)">Homologar Banca</button>`
+          : '';
+        actions.style.display = row.permissions.canHomologateCommittee ? 'flex' : 'none';
+
+        // block:'start' (com o scroll-margin-top de .card compensando o
+        // cabeçalho fixo): 'nearest' rolava o mínimo e o painel parava colado
+        // na borda inferior, com pouco movimento perceptível.
+        document.getElementById('committeePanel').style.display = 'block';
+        document.getElementById('committeePanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      // ── Professores e código do período ───────────────────────────────
+      function openTeacherPanel() {
+        clearTeacherForm();
+        renderTeachers();
+        const panel = document.getElementById('teacherPanel');
+        panel.style.display = 'block';
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      function closeTeacherPanel() {
+        document.getElementById('teacherPanel').style.display = 'none';
+      }
+
+      function clearTeacherForm() {
+        ['fTeacherName','fTeacherEmail','fTeacherTitulacao','fTeacherInstituicao','fTeacherPhone']
+          .forEach(id => { document.getElementById(id).value = ''; });
+        updateTeacherKindHint();
+      }
+
+      // enrollmentLinkFor/copyEnrollmentLink vivem em ui_scripts.html: o
+      // Orientador precisa deles também, na guia "Convite aos Alunos".
+      function renderEnrollmentCode() {
+        const codeEl = document.getElementById('enrollmentCode');
+        if (codeEl) codeEl.innerText = enrollmentCode || '—';
+        const link = document.getElementById('enrollmentLink');
+        if (link) link.value = enrollmentLinkFor(enrollmentCode);
+      }
+
+      function renderTeachers() {
+        const tbody = document.getElementById('teacherTableBody');
+        if (!tbody) return;
+        if (!teachers.length) {
+          tbody.innerHTML = '<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--secondary-color);">' +
+            'Nenhum professor cadastrado ainda.</td></tr>';
+          return;
+        }
+        // O índice viaja no onclick, nunca o e-mail: escHtml não escapa aspas
+        // simples, e um endereço com apóstrofo (raro, mas válido, e digitado à
+        // mão pelo Responsável) escaparia da string JS do atributo.
+        tbody.innerHTML = teachers.map((t, i) => `
+          <tr style="${(t.isActive || t.invitePending) ? '' : 'opacity:0.5;'}">
+            <td>${escHtml(t.name) || '<em style="color:var(--secondary-color);">(aguardando cadastro)</em>'}${
+              t.isExternal ? ' <span class="badge badge-neutral">externo</span>' : ''}${
+              t.invitePending ? ' <span class="badge badge-waiting">convite pendente</span>' : ''}</td>
+            <td style="font-size:12px;">${escHtml(t.email)}</td>
+            <td style="font-size:12px;">${escHtml(t.titulacao || '—')}</td>
+            <td style="font-size:12px;">${escHtml(t.instituicao || '—')}</td>
+            <td style="text-align:center;">
+              ${t.invitePending ? '' : `
+                <button class="btn btn-secondary" style="width:auto;padding:4px 10px;font-size:11px;"
+                        onclick="toggleTeacher(${i}, ${t.isActive ? 'false' : 'true'}, this)">
+                  ${t.isActive ? 'Desativar' : 'Reativar'}
+                </button>`}
+              <button class="btn btn-secondary" style="width:auto;padding:4px 10px;font-size:11px;"
+                      title="Reenvia o endereço do sistema e como entrar. Não reexibe a senha."
+                      onclick="resendInvitation(${i}, this)">Reenviar convite</button>
+              ${t.isExternal ? `
+                <button class="btn btn-secondary" style="width:auto;padding:4px 10px;font-size:11px;"
+                        onclick="resetTeacherPassword(${i}, this)">Nova senha</button>` : ''}
+            </td>
+          </tr>`).join('');
+      }
+
+      // Diz, enquanto o Responsável digita, por qual porta aquela pessoa vai
+      // entrar. O servidor decide de novo por conta própria — isto é cortesia,
+      // não autoridade.
+      function updateTeacherKindHint() {
+        const hint = document.getElementById('teacherKindHint');
+        const field = document.getElementById('fTeacherEmail');
+        if (!hint || !field) return;
+
+        const email = field.value.trim().toLowerCase();
+        const at = email.lastIndexOf('@');
+        if (at === -1 || !institutionalDomain) {
+          hint.style.color = 'var(--secondary-color)';
+          hint.innerText = 'O tipo de acesso é definido pelo domínio do e-mail.';
+          return;
+        }
+
+        if (email.substring(at + 1) === institutionalDomain) {
+          hint.style.color = 'var(--success-color)';
+          hint.innerText = 'Conta institucional: entra pelo Google, sem senha, e ' +
+                           'pode orientar TCC.';
+        } else {
+          hint.style.color = 'var(--secondary-color)';
+          hint.innerText = 'Fora de @' + institutionalDomain + ': recebe uma senha ' +
+                           'por e-mail. Participa de banca e assina Ata, mas não ' +
+                           'orienta TCC.';
+        }
+      }
+
+      // O índice viaja no onclick, nunca o e-mail — mesma razão de toggleTeacher.
+      function resendInvitation(i, btn) {
+        const t = teachers[i];
+        if (!t) return;
+        const done = beginBusy(btn, 'Enviando…');
+        google.script.run
+          .withSuccessHandler(res => {
+            done();
+            showMessage(res && res.success ? res.msg : 'Erro: ' + (res ? res.msg : 'desconhecido'),
+                        !(res && res.success));
+          })
+          .withFailureHandler(err => { done(); showMessage('Erro técnico: ' + err.message, true); })
+          .cmdResendInvitation(t.email);
+      }
+
+      function inviteTeacher(btn) {
+        const email = document.getElementById('fTeacherEmail').value.trim();
+        if (!email) { showMessage('Informe o e-mail do professor(a).', true); return; }
+
+        const done = beginBusy(btn, 'Enviando…');
+        google.script.run
+          .withSuccessHandler(res => {
+            done();
+            if (res && res.success) {
+              if (res.password) {
+                showMessage('Convite enviado. Senha (anote agora, não será mostrada de novo): ' + res.password);
+              } else {
+                showMessage(res.msg || 'Convite enviado.');
+              }
+              clearTeacherForm();
+              reloadTeachers();
+            } else {
+              showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+            }
+          })
+          .withFailureHandler(err => { done(); showMessage('Erro técnico: ' + err.message, true); })
+          .cmdInviteTeacher({
+            email: email,
+            name:  document.getElementById('fTeacherName').value.trim()
+          });
+      }
+
+      function saveTeacher(btn) {
+        const data = {
+          name:        document.getElementById('fTeacherName').value.trim(),
+          email:       document.getElementById('fTeacherEmail').value.trim(),
+          titulacao:   document.getElementById('fTeacherTitulacao').value.trim(),
+          instituicao: document.getElementById('fTeacherInstituicao').value.trim(),
+          phone:       document.getElementById('fTeacherPhone').value.trim()
+        };
+        if (!data.name)  { showMessage('Informe o nome do professor(a).', true); return; }
+        if (!data.email) { showMessage('Informe o e-mail do professor(a).', true); return; }
+
+        const done = beginBusy(btn, 'Salvando…');
+        google.script.run
+          .withSuccessHandler(res => {
+            done();
+            if (res && res.success) {
+              // A senha aparece UMA vez: o hash é tudo o que fica guardado, então
+              // não há como mostrá-la de novo — só gerar outra.
+              if (res.password) {
+                showMessage('Cadastrado. Senha (anote agora, não será mostrada de novo): ' + res.password);
+              } else {
+                showMessage(res.msg || 'Cadastro salvo.');
+              }
+              clearTeacherForm();
+              reloadTeachers();
+            } else {
+              showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+            }
+          })
+          .withFailureHandler(err => { done(); showMessage('Erro técnico: ' + err.message, true); })
+          .cmdSaveTeacher(data);
+      }
+
+      function toggleTeacher(index, activate, btn) {
+        const teacher = teachers[index];
+        if (!teacher) return;
+        const done = beginBusy(btn, '…');
+        google.script.run
+          .withSuccessHandler(res => {
+            done();
+            showMessage(res && res.success ? res.msg : 'Erro: ' + (res ? res.msg : ''), !(res && res.success));
+            reloadTeachers();
+          })
+          .withFailureHandler(err => { done(); showMessage('Erro técnico: ' + err.message, true); })
+          .cmdSetTeacherActive(teacher.email, activate);
+      }
+
+      function resetTeacherPassword(index, btn) {
+        const teacher = teachers[index];
+        if (!teacher) return;
+        const done = beginBusy(btn, '…');
+        google.script.run
+          .withSuccessHandler(res => {
+            done();
+            if (res && res.success) showMessage('Nova senha (anote agora): ' + res.password);
+            else showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+          })
+          .withFailureHandler(err => { done(); showMessage('Erro técnico: ' + err.message, true); })
+          .cmdResetTeacherPassword(teacher.email);
+      }
+
+      function regenerateCode(btn) {
+        if (!confirm('Gerar um código novo invalida o atual: quem ainda não se ' +
+                     'cadastrou vai precisar do novo. Continuar?')) return;
+        const done = beginBusy(btn, '…');
+        google.script.run
+          .withSuccessHandler(res => {
+            done();
+            if (res && res.success) {
+              enrollmentCode = res.code;
+              renderEnrollmentCode();
+              showMessage(res.msg);
+            } else {
+              showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+            }
+          })
+          .withFailureHandler(err => { done(); showMessage('Erro técnico: ' + err.message, true); })
+          .cmdRegenerateEnrollmentCode(currentSemesterName);
+      }
+
+      function reloadTeachers() {
+        google.script.run
+          .withSuccessHandler(list => { teachers = list || []; renderTeachers(); })
+          .withFailureHandler(err => console.error(err))
+          .getTeacherRegistry();
+      }
+
+      // ── Períodos letivos ──────────────────────────────────────────────
+      function openSemesterPanel() {
+        document.getElementById('fSemesterName').value = '';
+        document.getElementById('fClassesStart').value = '';
+        document.getElementById('fClassesEnd').value = '';
+        renderSemesterDates();
+        document.getElementById('fInchargeEmail').value = currentUserEmail;
+        document.getElementById('fInchargeName').value = currentUserName || '';
+        document.getElementById('semesterActions').innerHTML =
+          '<button class="btn btn-primary" onclick="createSemester(this)">Criar Período</button>';
+        renderEnrollmentCode();
+        const panel = document.getElementById('semesterPanel');
+        panel.style.display = 'block';
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      function closeSemesterPanel() {
+        document.getElementById('semesterPanel').style.display = 'none';
+      }
+
+      function createSemester(btn) {
+        const data = {
+          semesterName:  document.getElementById('fSemesterName').value.trim(),
+          inchargeEmail: document.getElementById('fInchargeEmail').value.trim(),
+          inchargeName:  document.getElementById('fInchargeName').value.trim(),
+          classesStart:  document.getElementById('fClassesStart').value,
+          classesEnd:    document.getElementById('fClassesEnd').value
+        };
+        if (!data.semesterName) { showMessage('Informe o período letivo.', true); return; }
+
+        const done = beginBusy(btn, 'Criando…');
+        google.script.run
+          .withSuccessHandler(res => {
+            done();
+            if (res && res.success) {
+              showMessage('Período ' + data.semesterName + ' criado.');
+              offerSemesterJump(data.semesterName);
+            } else {
+              showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+            }
+          })
+          .withFailureHandler(err => { done(); appAlert('Erro técnico: ' + err.message); })
+          .cmdCreateSemester(data);
+      }
+
+      function renderSemesterDates() {
+        document.getElementById('fCurrentClassesStart').value = semesterInfo.classesStart || '';
+        document.getElementById('fCurrentClassesEnd').value = semesterInfo.classesEnd || '';
+        document.getElementById('semesterSystemDates').innerText =
+          'No sistema: criado em ' + (semesterInfo.createdAt ? formatStamp(semesterInfo.createdAt) : '—') +
+          (semesterInfo.endedAt ? ' · encerrado em ' + formatStamp(semesterInfo.endedAt) : '') + '.';
+      }
+
+      function saveSemesterDates(btn) {
+        const data = {
+          classesStart: document.getElementById('fCurrentClassesStart').value,
+          classesEnd:   document.getElementById('fCurrentClassesEnd').value
+        };
+        const done = beginBusy(btn, 'Salvando…');
+        google.script.run
+          .withSuccessHandler(res => {
+            done();
+            if (res && res.success) {
+              semesterInfo.classesStart = data.classesStart;
+              semesterInfo.classesEnd = data.classesEnd;
+              showMessage(res.msg);
+            } else {
+              showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+            }
+          })
+          .withFailureHandler(err => { done(); showMessage('Erro técnico: ' + err.message, true); })
+          .cmdUpdateSemesterDates(currentSemesterName, data);
+      }
+
+      // ── Menu de ações e consolidado ───────────────────────────────────
+      function runMenuAction(action) {
+        document.getElementById('actionMenu').open = false;
+        action();
+      }
+
+      // Fecha o menu num clique fora dele, como qualquer menu suspenso.
+      document.addEventListener('click', ev => {
+        const menu = document.getElementById('actionMenu');
+        if (menu.open && !menu.contains(ev.target)) menu.open = false;
+      });
+
+      function exportReport() {
+        const summary = document.querySelector('#actionMenu summary');
+        const done = beginBusy(summary, 'Gerando consolidado…');
+        google.script.run
+          .withSuccessHandler(res => {
+            done();
+            if (!res || !res.success) {
+              showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+              return;
+            }
+            // O BOM faz o Excel ler o arquivo como UTF-8; sem ele os acentos
+            // chegam trocados.
+            const blob = new Blob(['\uFEFF' + res.csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = res.fileName;
+            link.textContent = 'Se o download não começou, clique aqui para baixar ' + res.fileName;
+            // O clique automático pode ser barrado pelo iframe do Apps Script.
+            // O link fica à vista: clicado pela pessoa, ele sempre vale.
+            const fallback = document.getElementById('reportFallback');
+            fallback.innerHTML = '';
+            fallback.appendChild(link);
+            fallback.style.display = 'block';
+            link.click();
+            showMessage('Consolidado gerado: ' + res.fileName);
+          })
+          .withFailureHandler(err => { done(); showMessage('Erro técnico: ' + err.message, true); })
+          .getSemesterReport();
+      }
+
+      // O seletor de período do cabeçalho é montado no servidor, então só
+      // mostra o período novo depois de recarregar a página. O botão faz isso
+      // com um clique de verdade: navegar a janela de topo exige o gesto do
+      // usuário (allow-top-navigation-by-user-activation), e por isso não pode
+      // sair daqui, de dentro do callback.
+      function offerSemesterJump(semesterName) {
+        document.getElementById('semesterActions').innerHTML =
+          '<button class="btn btn-primary" onclick="goToSemester(\'' + escHtml(semesterName) + '\')">' +
+          'Ir para o período ' + escHtml(semesterName) + '</button>';
+      }
+
+      // Sai do painel para a tela de configuração (app 1). Navega a janela de
+      // topo, como as trocas de papel e de período: o app roda num iframe.
+      function openSystemSetup() {
+        setBusyCursor(true);
+        window.top.location.href = appUrl() + '?page=setup';
+      }
+
+      function goToSemester(semesterName) {
+        setBusyCursor(true);
+        window.top.location.href = appUrl()
+          + '?page=switch_semester&semester=' + encodeURIComponent(semesterName);
+      }
+
+      function endSemester(btn) {
+        appConfirm(
+          'Encerrar o período ' + currentSemesterName + '?\n\n' +
+          'Ele deixa de aparecer no seletor de períodos e ninguém mais entra ' +
+          'nele. Os dados continuam onde estão.',
+          { confirmLabel: 'Encerrar' }
+        ).then(ok => {
+          if (!ok) return;
+          const done = beginBusy(btn, 'Encerrando…');
+          google.script.run
+            .withSuccessHandler(res => {
+              done();
+              if (res && res.success) {
+                showMessage(res.msg + ' Recarregue a página para continuar.');
+              } else {
+                showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+              }
+            })
+            .withFailureHandler(err => { done(); appAlert('Erro técnico: ' + err.message); })
+            .cmdEndSemester(currentSemesterName);
+        });
+      }
+
+      function openDetailPanel(proposalId) {
+        const row = rows.find(r => r.proposalId === proposalId);
+        if (!row) return;
+
+        document.getElementById('detailStudent').innerText = row.studentName;
+        document.getElementById('detailDoc').innerHTML =
+          proposalDocLinkHtml(row.docId) + workFileLinkHtml(row.workFileId) +
+          (row.defense ? renderMinutesSummary(row.defense) : '') +
+          finalDeliveryHtml(row) +
+          documentsHtml(row) +
+          closePanelHtml(row);
+        renderEventLog(document.getElementById('detailLog'), row.events, {
+          proposalId: proposalId,
+          canComment: true,
+          // Reabre o painel: applyResult redesenha a tabela e fecha os painéis,
+          // e quem acabou de comentar quer continuar lendo o andamento.
+          onApplied: res => { applyResult(res); openDetailPanel(proposalId); }
+        });
+
+        const panel = document.getElementById('detailPanel');
+        panel.style.display = 'block';
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      /** O que o aluno entregou na Fase 5, para a conferência antes de finalizar. */
+      function finalDeliveryHtml(row) {
+        const d = row.defense;
+        if (!d || (!d.finalWorkFileId && !d.riuReceiptUrl)) return '';
+        return `<div style="margin-top:12px;">
+          <h4 style="margin:0 0 6px;">Entrega final</h4>
+          ${d.finalWorkFileId ? workFileLinkHtml(d.finalWorkFileId, 'Versão final do TCC') : ''}
+          ${d.riuReceiptUrl ? `<p class="file-link-hint">Comprovante do RIU:
+             <a href="${escHtml(d.riuReceiptUrl)}" target="_blank">${escHtml(d.riuReceiptUrl)}</a></p>` : ''}
+        </div>`;
+      }
+
+      /**
+       * Os dois PDFs. Só o Responsável os vê aqui, e é ele quem reemite depois
+       * de o período encerrar — a partir daí ninguém mais entra no período, e
+       * ele é quem sobra.
+       */
+      function documentsHtml(row) {
+        const d = row.defense;
+        if (!d || !d.studentAgreedAt) return '';
+        return `<div style="margin-top:12px;">
+          <h4 style="margin:0 0 6px;">Documentos da defesa</h4>
+          ${defenseDocButtonHtml(row.proposalId, 'ata', 'Ata da Defesa (PDF)', d.minutesPdfId)}
+          ${defenseDocButtonHtml(row.proposalId, 'folha', 'Folha de Aprovação (PDF)', d.approvalSheetPdfId)}
+        </div>`;
+      }
+
+      function closeDetailPanel() {
+        document.getElementById('detailPanel').style.display = 'none';
+      }
+
+      function closeCommitteePanel() {
+        document.getElementById('committeePanel').style.display = 'none';
+      }
+
+      function homologateCommittee(proposalId, btn) {
+        const row = rows.find(r => r.proposalId === proposalId);
+        appConfirm('Confirmar homologação da banca de ' + (row ? row.studentName : 'este aluno') + '?').then(ok => {
+          if (!ok) return;
+          const done = beginBusy(btn, 'Homologando…');
+          google.script.run
+            .withSuccessHandler(res => {
+              done();
+              if (res && res.success) {
+                showMessage('Banca homologada com sucesso!');
+                applyResult(res);
+              } else {
+                showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+              }
+            })
+            .withFailureHandler(err => { done(); appAlert('Erro técnico: ' + err.message); })
+            .cmdHomologateCommittee(proposalId);
+        });
+      }
+
+      function homologateProposal(proposalId, btn) {
+        const row = rows.find(r => r.proposalId === proposalId);
+        appConfirm('Confirmar homologação da proposta de ' + (row ? row.studentName : 'este aluno') + '?').then(ok => {
+          if (!ok) return;
+          const done = beginBusy(btn, 'Homologando…');
+          google.script.run
+            .withSuccessHandler(res => {
+              done();
+              if (res && res.success) {
+                showMessage('Proposta homologada com sucesso!');
+                applyResult(res);
+              } else {
+                showMessage('Erro: ' + (res ? res.msg : 'desconhecido'), true);
+              }
+            })
+            .withFailureHandler(err => { done(); appAlert('Erro técnico: ' + err.message); })
+            .cmdHomologateProposal(proposalId);
+        });
+      }
+
+      function showMessage(msg, isError) {
+        const bar = document.getElementById('messagesBar');
+        bar.innerText = msg;
+        bar.classList.toggle('is-error', !!isError);
+        bar.style.display = 'block';
+        setTimeout(() => { bar.style.display = 'none'; }, 5000);
+      }
+
+      function onLoadError(err) {
+        document.getElementById('masterTableBody').innerHTML =
+          '<tr><td colspan="6" style="padding:20px;text-align:center;color:#c62828;">' +
+          'Erro ao carregar dados: ' + escHtml(String(err)) + '</td></tr>';
+      }
+
+      function onLoadTimeout() {
+        document.getElementById('masterTableBody').innerHTML =
+          '<tr><td colspan="6" style="padding:20px;">' + loadTimeoutHtml() + '</td></tr>';
+      }
+    </script>
+  </body>
+</html>
